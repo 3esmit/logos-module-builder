@@ -8,7 +8,7 @@
     rust-overlay.url = "github:oxalica/rust-overlay";
     rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
     # SDK and module deps — owned by this builder, injected into backends
-    logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk";
+    logos-cpp-sdk.url = "github:3esmit/logos-cpp-sdk?rev=4726bd0e5d74dccdbfd966733b21590d553a3c68";
     logos-cpp-sdk.inputs.logos-protocol.follows = "logos-protocol";
     # Protocol layer (transports + lp_* C ABI + the protocol semver every
     # module gets stamped with) and the Qt developer layer modules link.

@@ -1625,16 +1625,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1786113947,
-        "narHash": "sha256-n9Lhe6vxyvkGSwlfT5HylTKsFVm5bkpRfUvTbWd6X2c=",
-        "owner": "logos-co",
+        "lastModified": 1786212977,
+        "narHash": "sha256-hAR1ltNmQnL5QZF1nhWuEZVH9EikV0G2obYzWkMVx/I=",
+        "owner": "3esmit",
         "repo": "logos-cpp-sdk",
-        "rev": "dfd46282a7b7d48075f890ace3a39a128e5b2576",
+        "rev": "4726bd0e5d74dccdbfd966733b21590d553a3c68",
         "type": "github"
       },
       "original": {
-        "owner": "logos-co",
+        "owner": "3esmit",
         "repo": "logos-cpp-sdk",
+        "rev": "4726bd0e5d74dccdbfd966733b21590d553a3c68",
         "type": "github"
       }
     },
