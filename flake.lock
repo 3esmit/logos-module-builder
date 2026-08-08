@@ -29168,16 +29168,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1786113978,
+        "lastModified": 1786217932,
         "narHash": "sha256-X3qVyaMqk3pA7rEdr9YIrvRNHjUBO75eNQXghBwDs5w=",
-        "owner": "logos-co",
+        "owner": "3esmit",
         "repo": "logos-view-module-runtime",
-        "rev": "2b178f74ad1266d54113960aba22fbfa0370f9ea",
+        "rev": "b0030040266a05509ac6de892832c3578f0ab3a9",
         "type": "github"
       },
       "original": {
-        "owner": "logos-co",
+        "owner": "3esmit",
         "repo": "logos-view-module-runtime",
+        "rev": "b0030040266a05509ac6de892832c3578f0ab3a9",
         "type": "github"
       }
     },
