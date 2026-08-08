@@ -28,7 +28,7 @@
     # standalone's lock) so a bump for module testing is one lock update on
     # this flake — no standalone release required.
     logos-design-system.url = "github:logos-co/logos-design-system";
-    logos-view-module-runtime.url = "github:logos-co/logos-view-module-runtime";
+    logos-view-module-runtime.url = "github:3esmit/logos-view-module-runtime?rev=b0030040266a05509ac6de892832c3578f0ab3a9";
     logos-standalone-app.url = "github:logos-co/logos-standalone-app";
     logos-standalone-app.inputs.logos-design-system.follows = "logos-design-system";
     logos-standalone-app.inputs.logos-view-module-runtime.follows = "logos-view-module-runtime";
