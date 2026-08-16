@@ -156,17 +156,25 @@ Usage:
 Sets:
   QT_VERSION_MAJOR - The major Qt version found (5 or 6)
 #]=======================================================================]
-function(logos_find_qt)
+# NOTE: this MUST be a macro, not a function. Qt's mingw
+# Qt6EntryPointMinGW32Target.cmake guards itself with a bare include_guard()
+# (variable-scoped) while creating a DIRECTORY-scoped imported target. If the
+# first find_package(Qt6) runs inside a function scope, the guard variable and
+# every <pkg>_FOUND marker die at endfunction() while the EntryPointMinGW32
+# target survives, so the next find_package(Qt6) (via logos-protocol's /
+# logos-qt-sdk's find_dependency) re-enters and hits
+# "add_library cannot create imported target EntryPointMinGW32".
+macro(logos_find_qt)
     if(NOT DEFINED QT_VERSION_MAJOR)
         find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core RemoteObjects)
         if(Qt6_FOUND)
-            set(QT_VERSION_MAJOR 6 PARENT_SCOPE)
+            set(QT_VERSION_MAJOR 6)
         else()
-            set(QT_VERSION_MAJOR 5 PARENT_SCOPE)
+            set(QT_VERSION_MAJOR 5)
         endif()
     endif()
     find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core RemoteObjects)
-endfunction()
+endmacro()
 
 #[=======================================================================[.rst:
 logos_module
@@ -526,8 +534,14 @@ function(logos_module)
             set(EXT_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib")
         endif()
 
-        # Find the library (prefer shared, fall back to static)
-        if(APPLE)
+        # Find the library (prefer shared, fall back to static).
+        # On Windows a shared library is TWO files: you LINK against the import
+        # library (lib<x>.dll.a under mingw) and SHIP the .dll. Neither spelling
+        # appeared in these lists, so every external-library module failed to
+        # cross-compile with "was not found in .../lib".
+        if(WIN32)
+            set(EXT_LIB_NAMES lib${ext_lib}.dll.a ${ext_lib}.dll.a lib${ext_lib}.lib ${ext_lib}.lib lib${ext_lib}.dll ${ext_lib}.dll lib${ext_lib}.a ${ext_lib}.a)
+        elseif(APPLE)
             set(EXT_LIB_NAMES lib${ext_lib}.dylib lib${ext_lib}.so ${ext_lib}.dylib ${ext_lib}.so lib${ext_lib}.a ${ext_lib}.a)
         else()
             set(EXT_LIB_NAMES lib${ext_lib}.so lib${ext_lib}.dylib ${ext_lib}.so ${ext_lib}.dylib lib${ext_lib}.a ${ext_lib}.a)
@@ -539,12 +553,38 @@ function(logos_module)
             target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE ${${ext_lib}_PATH})
             target_include_directories(${MODULE_NAME}_module_plugin PRIVATE ${EXT_INCLUDE_DIR})
 
-            # Copy shared libraries to output directory (static archives are linked in, no runtime copy needed)
+            # Copy shared libraries to output directory (static archives are
+            # linked in, no runtime copy needed).
+            #
+            # Windows needs care: what we just linked is usually the IMPORT
+            # library lib<x>.dll.a, whose name ends in ".a" and would therefore
+            # be mistaken for a static archive and skipped -- shipping a plugin
+            # with no runtime DLL beside it. Resolve the companion .dll and copy
+            # THAT instead.
             get_filename_component(EXT_LIB_FILENAME "${${ext_lib}_PATH}" NAME)
-            if(NOT EXT_LIB_FILENAME MATCHES "\\.a$")
+            set(EXT_RUNTIME_LIB "")
+            if(EXT_LIB_FILENAME MATCHES "\\.dll\\.a$" OR EXT_LIB_FILENAME MATCHES "\\.lib$")
+                get_filename_component(_ext_dir "${${ext_lib}_PATH}" DIRECTORY)
+                foreach(_dll_name lib${ext_lib}.dll ${ext_lib}.dll)
+                    if(EXISTS "${_ext_dir}/${_dll_name}")
+                        set(EXT_RUNTIME_LIB "${_ext_dir}/${_dll_name}")
+                        set(EXT_LIB_FILENAME "${_dll_name}")
+                        break()
+                    endif()
+                endforeach()
+                if(NOT EXT_RUNTIME_LIB)
+                    message(FATAL_ERROR
+                        "External library '${ext_lib}': linked ${EXT_LIB_FILENAME} but found no "
+                        "companion DLL in ${_ext_dir}. The plugin would build and then fail to "
+                        "load at runtime, so refusing to continue.")
+                endif()
+            elseif(NOT EXT_LIB_FILENAME MATCHES "\\.a$")
+                set(EXT_RUNTIME_LIB "${${ext_lib}_PATH}")
+            endif()
+            if(EXT_RUNTIME_LIB)
                 add_custom_command(TARGET ${MODULE_NAME}_module_plugin PRE_LINK
                     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                        ${${ext_lib}_PATH}
+                        ${EXT_RUNTIME_LIB}
                         ${CMAKE_BINARY_DIR}/modules/${EXT_LIB_FILENAME}
                     COMMENT "Copying ${EXT_LIB_FILENAME} to modules directory"
                 )
@@ -614,9 +654,36 @@ function(logos_module)
                 elseif(TARGET logos_protocol)
                     target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE logos_protocol)
                 endif()
+                # Native libraries Rust's `std` leaves undefined in a staticlib.
+                # These are per-platform and NOT interchangeable: the old
+                # two-way APPLE/else split silently meant "else == Linux" and
+                # put `pthread dl` on the Windows link line, where `dl` does not
+                # exist at all and `pthread` lives in a separate
+                # mingw_w64-pthreads package that is not on the sysroot search
+                # path -- so a Rust module could never link for Windows.
                 if(APPLE)
                     target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE
                         "-framework CoreFoundation" "-framework Security")
+                elseif(WIN32)
+                    # Derived from the archive's own undefined symbols, not
+                    # guessed: BCryptGenRandom -> bcrypt; Nt*/Rtl* (file I/O and
+                    # the unwinder) -> ntdll; GetUserProfileDirectoryW ->
+                    # userenv; WaitOnAddress/WakeByAddress* -> synchronization
+                    # (kernel32's mingw import lib does not carry them); the
+                    # WSA*/socket set -> ws2_32. `ProcessPrng` needs nothing
+                    # here -- std bundles its own bcryptprimitives import stubs
+                    # inside the archive. Qt happens to drag several of these in
+                    # already, but naming them keeps the Rust link independent
+                    # of Qt's link interface.
+                    # `pthread` is winpthreads, which mkLogosModule adds as a
+                    # build input for a cross Rust module (see the note there).
+                    # It is NOT part of the mingw sysroot -- nixpkgs builds mingw
+                    # against mcfgthread -- but a crate's vendored C can still
+                    # want it: aws-lc-sys compiles aws-lc's thread_pthread.c.
+                    # ld pulls archive members on demand, so naming it costs
+                    # nothing for a module that references no pthread symbol.
+                    target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE
+                        ws2_32 bcrypt ntdll userenv synchronization advapi32 pthread)
                 else()
                     target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE pthread dl)
                 endif()

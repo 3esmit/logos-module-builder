@@ -39,7 +39,7 @@ let
   # Per-system build outputs
   perSystem = forAllSystems (system:
     let
-      pkgs = import nixpkgs { inherit system; };
+      pkgs = common.mkPkgs system;
 
       # ── Concrete dependency classification (mirrors mkLogosModule.nix) ──────
       # LIDL-based deps → bindings generated from the dep's published `lidl`
@@ -80,40 +80,10 @@ let
       # buildPlugin.nix always types "qt" — the `headers-lp` entry exists so an
       # lp consumer that ever reaches this path fails with a real message
       # instead of a "cannot coerce a set to a string" from the header copy.
-      moduleInputs = lib.filterAttrs (n: _: builtins.elem n legacyHeaderDepNames) flakeInputs;
-      resolvedModuleDeps = lib.mapAttrs (depName: input:
-        let
-          ps = input.packages.${system} or null;
-          fallback = if input ? packages.${system}.default
-                     then input.packages.${system}.default else input;
-          staleLpDep = reason: throw ''
-            logos-module-builder: dependency '${depName}' cannot be consumed by an lp (Qt-free) module.
-
-            '${depName}' is taking the transitional header-copy path (it publishes
-            no `lidl` output), and
-              ${reason}.
-            So the only headers it offers are Qt-typed. Copying those into a
-            Qt-free translation unit fails deep inside a generated source file
-            with a wall of unrelated-looking Qt type errors, so this build stops
-            here instead.
-
-            Fix: rebuild / re-pin '${depName}' against a current logos-module-builder.
-            Any module built by one publishes a `lidl` contract (preferred — it
-            skips the header copy entirely) as well as a `headers-lp` output.
-          '';
-        in
-        if ps != null then {
-          default     = ps.default;
-          lib         = ps.lib or ps.default;
-          headers-qt  = ps.headers-qt or ps.include or ps.default;
-          headers-lp  = ps.headers-lp or (staleLpDep "its packages.${system} exposes no `headers-lp`");
-        } else {
-          default     = fallback;
-          lib         = fallback;
-          headers-qt  = fallback;
-          headers-lp  = staleLpDep "the flake input is a bare derivation with no packages.${system} attrset";
-        }
-      ) moduleInputs;
+      resolvedModuleDeps = common.resolveLegacyHeaderDeps {
+        inherit system flakeInputs;
+        depNames = legacyHeaderDepNames;
+      };
 
       # Resolve a single externalLibInputs entry for a given variant.
       # Supports both simple (bare flake input) and structured ({ input, packages }) formats.
@@ -139,10 +109,25 @@ let
 
       # Resolve SDK deps for this system — injected into the backend
       logosSdk = logos-cpp-sdk.packages.${system}.default;
+      # Build-platform half of the SDK. logos-cpp-generator is invoked by BARE
+      # NAME from a build phase (logos-plugin-qt/lib/buildPlugin.nix:145), so it
+      # must run on the builder. Under cross, packages.x86_64-windows.default
+      # carries no runnable generator at all -- logos-cpp-sdk/nix/bin.nix:39
+      # silently skips the mingw .exe -- hence "command not found".
+      #
+      # `logosSdk` deliberately stays TARGET-typed: it is ALSO the header and
+      # CMake-package root passed to LOGOS_CPP_SDK_ROOT, and those must keep
+      # coming from the Windows set. Splitting the two roles is the whole point;
+      # pointing the headers at the build system would produce a build that
+      # SUCCEEDS while linking the wrong architecture.
+      #
+      # buildSystemFor is the identity on every native system, so this is a
+      # no-op off the Windows target.
+      logosSdkBuild = logos-cpp-sdk.packages.${common.buildSystemFor system}.default;
       logosQtSdk = logos-qt-sdk.packages.${system}.default;
       # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
       # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
-      logosQtGenerator = logos-qt-sdk.packages.${system}.logos-qt-generator;
+      logosQtGenerator = logos-qt-sdk.packages.${common.buildSystemFor system}.logos-qt-generator;
       logosProtocolPkg = logos-protocol.packages.${system}.default;
       logosModule = logos-module.packages.${system}.default;
 
@@ -207,9 +192,19 @@ let
           preConfigure = preConfigureStr;
           moduleDeps = resolvedModuleDeps;
           inherit externalLibs;
-          extraNativeBuildInputs = extraNativeBuildInputs ++ buildPkgs ++ [ logosSdk logosQtGenerator pkgs.jq ];
+          # pkgs.jq is target-typed too and jq runs in preConfigure
+          # (modulePreConfigure.nix:203). buildPackages == pkgs natively.
+          extraNativeBuildInputs = extraNativeBuildInputs ++ buildPkgs ++ [ logosSdkBuild logosQtGenerator pkgs.buildPackages.jq ];
           extraBuildInputs = extraBuildInputs ++ runtimePkgs ++ [ logosQtSdk logosProtocolPkg ];
-          extraCmakeFlags = [
+          # Qt splits each module's TOOLS (repc, moc, qmltyperegistrar) into a
+          # SEPARATE package that must run on the BUILD machine. Without these
+          # flags find_package(Qt6 COMPONENTS RemoteObjects) fails on a
+          # thoroughly misleading message -- it names Qt6RemoteObjects, but the
+          # TARGET config is found fine; it is Qt6RemoteObjectsTools that is
+          # missing. logos-nix's Windows overlay exposes the flags; the
+          # attribute is absent (and so `or []`) on a native build, which is why
+          # this needs no isWindows guard.
+          extraCmakeFlags = (pkgs.logosQtCrossCmakeFlags or [ ]) ++ [
             "-DLOGOS_CPP_SDK_ROOT=${logosSdk}"
             "-DLOGOS_QT_SDK_ROOT=${logosQtSdk}"
             "-DLOGOS_PROTOCOL_ROOT=${logosProtocolPkg}"
@@ -240,7 +235,10 @@ let
 
       # Delegate header generation to the backend
       moduleInclude = selectedBackend.buildHeaders {
-        inherit pkgs src config logosSdk;
+        inherit pkgs src config;
+        # buildHeaders uses this ONLY to put the generator on PATH
+        # (logos-plugin-qt/lib/buildHeaders.nix:44) -- a pure tool role.
+        logosSdk = logosSdkBuild;
         pluginLib = moduleLib;
       };
 
@@ -252,12 +250,27 @@ let
   # Development shell (delegates to backend for deps)
   devShells = forAllSystems (system:
     let
-      pkgs = import nixpkgs { inherit system; };
+      pkgs = common.mkPkgs system;
       logosSdk = logos-cpp-sdk.packages.${system}.default;
+      # Build-platform half of the SDK. logos-cpp-generator is invoked by BARE
+      # NAME from a build phase (logos-plugin-qt/lib/buildPlugin.nix:145), so it
+      # must run on the builder. Under cross, packages.x86_64-windows.default
+      # carries no runnable generator at all -- logos-cpp-sdk/nix/bin.nix:39
+      # silently skips the mingw .exe -- hence "command not found".
+      #
+      # `logosSdk` deliberately stays TARGET-typed: it is ALSO the header and
+      # CMake-package root passed to LOGOS_CPP_SDK_ROOT, and those must keep
+      # coming from the Windows set. Splitting the two roles is the whole point;
+      # pointing the headers at the build system would produce a build that
+      # SUCCEEDS while linking the wrong architecture.
+      #
+      # buildSystemFor is the identity on every native system, so this is a
+      # no-op off the Windows target.
+      logosSdkBuild = logos-cpp-sdk.packages.${common.buildSystemFor system}.default;
       logosQtSdk = logos-qt-sdk.packages.${system}.default;
       # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
       # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
-      logosQtGenerator = logos-qt-sdk.packages.${system}.logos-qt-generator;
+      logosQtGenerator = logos-qt-sdk.packages.${common.buildSystemFor system}.logos-qt-generator;
       logosProtocolPkg = logos-protocol.packages.${system}.default;
       logosModule = logos-module.packages.${system}.default;
 
