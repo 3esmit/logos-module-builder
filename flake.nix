@@ -8,12 +8,12 @@
     rust-overlay.url = "github:oxalica/rust-overlay";
     rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
     # SDK and module deps — owned by this builder, injected into backends
-    logos-cpp-sdk.url = "github:3esmit/logos-cpp-sdk?rev=ec020bd06776a71b204406384db2b194001bc543";
+    logos-cpp-sdk.url = "github:3esmit/logos-cpp-sdk?rev=91a84f90bc3bedce4d574f9b9091a8cbec454e0f";
     logos-cpp-sdk.inputs.logos-protocol.follows = "logos-protocol";
     # Protocol layer (transports + lp_* C ABI + the protocol semver every
     # module gets stamped with) and the Qt developer layer modules link.
-    logos-protocol.url = "github:3esmit/logos-protocol?rev=6086c922bf27ea53e073e92c997421c6e91baacd";
-    logos-qt-sdk.url = "github:3esmit/logos-qt-sdk?rev=67fac90bde3473d43c48483880492f024ad167e1";
+    logos-protocol.url = "github:3esmit/logos-protocol?rev=719a473fedbd7fbabcf9d5485f96abaddf29c622";
+    logos-qt-sdk.url = "github:3esmit/logos-qt-sdk?rev=30302744a15097339fce7a6c1359ad9b40b2539e";
     logos-qt-sdk.inputs.logos-protocol.follows = "logos-protocol";
     logos-qt-sdk.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
     logos-module.url = "github:logos-co/logos-module";
@@ -28,7 +28,7 @@
     # standalone's lock) so a bump for module testing is one lock update on
     # this flake — no standalone release required.
     logos-design-system.url = "github:logos-co/logos-design-system";
-    logos-view-module-runtime.url = "github:3esmit/logos-view-module-runtime?rev=b0030040266a05509ac6de892832c3578f0ab3a9";
+    logos-view-module-runtime.url = "github:3esmit/logos-view-module-runtime?rev=8aac03585bba147df1ea409af5ac177cf967713d";
     logos-standalone-app.url = "github:logos-co/logos-standalone-app";
     logos-standalone-app.inputs.logos-design-system.follows = "logos-design-system";
     logos-standalone-app.inputs.logos-view-module-runtime.follows = "logos-view-module-runtime";
