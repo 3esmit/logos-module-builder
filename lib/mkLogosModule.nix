@@ -90,7 +90,13 @@ let
   # Package outputs
   packages = forAllSystems (system:
     let
-      pkgs = import nixpkgs { inherit system; };
+      pkgs = common.mkPkgs system;
+
+      # Rust target triple when `system` is a cross pseudo-system; null natively.
+      # Every cross branch below keys off this being non-null, so a native build
+      # takes exactly the code path it did before.
+      rustCrossTarget =
+        if system == "x86_64-windows" then "x86_64-pc-windows-gnu" else null;
 
       # Rust toolchain for the crate compile. Default = the pinned nixpkgs rustc,
       # so non-Rust modules and Rust modules without a `nix.rust.toolchain` are
@@ -102,10 +108,63 @@ let
         if config.nix_rust.toolchain != null && rust-overlay != null
         then
           let
-            rpkgs = import nixpkgs { inherit system; overlays = [ (import rust-overlay) ]; };
-            toolchain = rpkgs.rust-bin.stable.${config.nix_rust.toolchain}.default;
-          in rpkgs.makeRustPlatform { cargo = toolchain; rustc = toolchain; }
+            # The toolchain must RUN on the builder and merely TARGET `system`.
+            # Asking the CROSS set for rust-bin evaluates
+            # `targetPackages.threads.package` (nixpkgs all-packages.nix) --
+            # an attribute only the MinGW branch touches and that the cross set
+            # does not define -- and mkPkgsWith refuses overlays for
+            # x86_64-windows for the same "that is not the set you asked for"
+            # reason. Taking it from the BUILD system sidesteps both, and is
+            # what a cross toolchain should be regardless.
+            # buildSystemFor is the identity on every native system, so this is
+            # a no-op there.
+            bpkgs = common.mkPkgsWith [ (import rust-overlay) ] (common.buildSystemFor system);
+            base = bpkgs.rust-bin.stable.${config.nix_rust.toolchain}.default;
+            toolchain =
+              if rustCrossTarget == null
+              then base
+              else base.override { targets = [ rustCrossTarget ]; };
+          in bpkgs.makeRustPlatform { cargo = toolchain; rustc = toolchain; }
         else pkgs.rustPlatform;
+
+      # Cross wiring for the crate compile. The derivation runs in the BUILD
+      # platform's stdenv (see rustPlatform above), so nothing sets these for us.
+      rustCrossEnv =
+        if rustCrossTarget == null then { }
+        else
+          let
+            cc = pkgs.stdenv.cc;  # `pkgs` is the TARGET set: the mingw wrapper
+            u = builtins.replaceStrings [ "-" ] [ "_" ] rustCrossTarget;
+            U = lib.toUpper u;
+          in {
+            CARGO_BUILD_TARGET = rustCrossTarget;
+            "CARGO_TARGET_${U}_LINKER" = "${cc}/bin/${cc.targetPrefix}cc";
+            # windows-gnu std links `-l:libpthread.a`, but nixpkgs builds
+            # mingw-w64 against mcfgthread, which ships no pthreads at all.
+            "CARGO_TARGET_${U}_RUSTFLAGS" = "-L native=${pkgs.windows.pthreads}/lib";
+            # cc-rs keys its toolchain off CC_<triple>/CXX_/AR_ with dashes
+            # replaced by underscores. Without these a build script compiles its
+            # bundled C for the BUILDER and the link then fails on undefined
+            # symbols -- silently, because the archive is still produced.
+            "CC_${u}" = "${cc}/bin/${cc.targetPrefix}cc";
+            "CXX_${u}" = "${cc}/bin/${cc.targetPrefix}c++";
+            "AR_${u}" = "${cc.bintools}/bin/${cc.targetPrefix}ar";
+            # The header half of the same pthreads story as RUSTFLAGS above.
+            # mingw-w64 DOES ship <sched.h>, <pthread.h> and <semaphore.h> --
+            # but in the winpthreads package, which is not on the default
+            # sysroot include path because nixpkgs builds mingw against
+            # mcfgthread. A crate's vendored C that reaches for them therefore
+            # fails with a bare "fatal error: sched.h: No such file or
+            # directory" that reads like the platform is unsupported when it is
+            # only unwired. aws-lc-sys hits exactly this, compiling
+            # jitterentropy for the Windows target.
+            #
+            # cc-rs appends CFLAGS_<triple>/CXXFLAGS_<triple> to the compiler
+            # invocations it drives, so this reaches build-script C without
+            # touching the Rust compile.
+            "CFLAGS_${u}" = "-I${pkgs.windows.pthreads}/include";
+            "CXXFLAGS_${u}" = "-I${pkgs.windows.pthreads}/include";
+          };
 
       # ── Concrete dependency classification ─────────────────────────────────
       # A dependency's typed `modules().<dep>` wrapper is generated from its
@@ -155,55 +214,11 @@ let
       # as a struct so the plugin builder can pick BOTH the dep's
       # plugin .dylib AND the right header variant for its own
       # --api-style without re-running the codegen at consume time.
-      # Backward-compatible fallbacks let older deps (which only
-      # expose `default`) still work for a QT consumer — they get
-      # treated as Qt-typed. An lp consumer gets no such fallback:
-      # Qt-typed headers cannot serve it, so it throws (see staleLpDep).
-      moduleInputs = lib.filterAttrs (n: _: builtins.elem n legacyHeaderDepNames) flakeInputs;
-      resolvedModuleDeps = lib.mapAttrs (depName: input:
-        let
-          ps = input.packages.${system} or null;
-          # Pre-version of this refactor: input was the raw flake-output
-          # derivation (not a packages set). Preserve that path so an
-          # external flake-input dep still works.
-          fallback = if input ? packages.${system}.default
-                     then input.packages.${system}.default else input;
-          # An lp (Qt-free) consumer must NOT silently fall back to a Qt-typed
-          # header set. The wrappers would declare QString/QVariantMap while the
-          # consumer's own codegen ran with `--api-style lp`, so the build dies
-          # deep inside a generated TU with a wall of unrelated-looking Qt type
-          # errors. Fail here instead, where we can say what is actually wrong.
-          # Lazy: this only fires if an lp consumer really reads `headers-lp`.
-          staleLpDep = reason: throw ''
-            logos-module-builder: dependency '${depName}' cannot be consumed by an lp (Qt-free) module.
-
-            '${depName}' is taking the transitional header-copy path (it publishes
-            no `lidl` output), and
-              ${reason}.
-            So the only headers it offers are Qt-typed. Copying those into a
-            Qt-free translation unit fails deep inside a generated source file
-            with a wall of unrelated-looking Qt type errors, so this build stops
-            here instead.
-
-            Fix: rebuild / re-pin '${depName}' against a current logos-module-builder.
-            Any module built by one publishes a `lidl` contract (preferred — it
-            skips the header copy entirely) as well as a `headers-lp` output.
-          '';
-        in
-        if ps != null then {
-          default     = ps.default;
-          lib         = ps.lib or ps.default;
-          headers-qt  = ps.headers-qt or ps.include or ps.default;
-          # lp (Qt-free) variant for core universal consumers. No Qt fallback —
-          # see staleLpDep above.
-          headers-lp  = ps.headers-lp or (staleLpDep "its packages.${system} exposes no `headers-lp`");
-        } else {
-          default     = fallback;
-          lib         = fallback;
-          headers-qt  = fallback;
-          headers-lp  = staleLpDep "the flake input is a bare derivation with no packages.${system} attrset";
-        }
-      ) moduleInputs;
+      # Shared with buildCppPlugin (view modules) — see common.nix.
+      resolvedModuleDeps = common.resolveLegacyHeaderDeps {
+        inherit system flakeInputs;
+        depNames = legacyHeaderDepNames;
+      };
 
       # Resolve interface dependencies (method/event contracts) to concrete
       # definition-file paths. A LOCAL interface lives in this repo's `src`;
@@ -250,7 +265,11 @@ let
       # (host tools), runtime -> buildInputs (link libs). Resolved with the same
       # dotted-path getPkg as buildPkgs/runtimePkgs. Fed only to rustStaticLib,
       # not the C++ plugin link.
-      rustNativeBuildPkgs = map (getPkg pkgs) (lib.filter builtins.isString config.nix_rust.packages.build);
+      # buildPackages, not pkgs: these are TOOLS that run on the builder
+      # (pkg-config, perl, protobuf, cmake). Under cross, resolving them from
+      # the target set would try to build each one FOR Windows. Identity on
+      # every native system, so no native derivation changes.
+      rustNativeBuildPkgs = map (getPkg pkgs.buildPackages) (lib.filter builtins.isString config.nix_rust.packages.build);
       rustBuildPkgs       = map (getPkg pkgs) (lib.filter builtins.isString config.nix_rust.packages.runtime);
 
       # Pre-resolve default variant external libs (always needed, avoids
@@ -261,12 +280,68 @@ let
         externalInputs = defaultResolvedExternalLibs;
       };
 
+      # metadata `include`: runtime files a module needs BESIDE its plugin but
+      # never links against -- in practice, dlopen'd libraries.
+      #
+      # Nothing else can stage these. The Windows DLL walk
+      # (logos-plugin-qt postFixup -> linkDLLsInfolder) is IMPORT-TABLE driven,
+      # so a library reached only through dlopen appears in no table and is
+      # invisible to it; on Unix there is equally no DT_NEEDED entry to follow.
+      # delivery_module hit exactly this with libpq: declared, needed at
+      # runtime, and silently absent from the module output.
+      #
+      # Sources are the module's own runtime nix packages and its resolved
+      # external libs; both `lib/` and `bin/` are searched, because a Windows
+      # shared library's runtime half lives in bin/ by convention.
+      #
+      # A name that matches nothing is NORMAL, not an error: the list is a
+      # deliberate cross-platform superset (modules name the .so, .dylib and
+      # .dll spellings side by side), so at most one spelling can ever match.
+      #
+      # Runs BEFORE the module's own postInstall, so author hooks can react to
+      # what was staged, and before the Windows postFixup, so linkDLLsInfolder
+      # then also walks the staged library's OWN imports (libpq pulls in
+      # libssl/libcrypto that way).
+      stageIncludedRuntimeFiles =
+        let
+          sources = runtimePkgs ++ lib.attrValues defaultResolvedExternalLibs;
+        in
+        lib.optionalString (config.include != [ ] && sources != [ ]) ''
+          echo "Staging declared runtime files (metadata 'include')..."
+          mkdir -p $out/lib
+          for _inc_name in ${lib.escapeShellArgs config.include}; do
+            for _inc_root in ${lib.escapeShellArgs (map toString sources)}; do
+              for _inc_sub in lib bin; do
+                if [ -e "$_inc_root/$_inc_sub/$_inc_name" ]; then
+                  cp -Lf "$_inc_root/$_inc_sub/$_inc_name" "$out/lib/" 2>/dev/null \
+                    && echo "  staged $_inc_name" && break 2
+                fi
+              done
+            done
+          done
+        '';
+
       # Resolve SDK deps for this system — injected into the backend
       logosSdk = logos-cpp-sdk.packages.${system}.default;
+      # Build-platform half of the SDK. logos-cpp-generator is invoked by BARE
+      # NAME from a build phase (logos-plugin-qt/lib/buildPlugin.nix:145), so it
+      # must run on the builder. Under cross, packages.x86_64-windows.default
+      # carries no runnable generator at all -- logos-cpp-sdk/nix/bin.nix:39
+      # silently skips the mingw .exe -- hence "command not found".
+      #
+      # `logosSdk` deliberately stays TARGET-typed: it is ALSO the header and
+      # CMake-package root passed to LOGOS_CPP_SDK_ROOT, and those must keep
+      # coming from the Windows set. Splitting the two roles is the whole point;
+      # pointing the headers at the build system would produce a build that
+      # SUCCEEDS while linking the wrong architecture.
+      #
+      # buildSystemFor is the identity on every native system, so this is a
+      # no-op off the Windows target.
+      logosSdkBuild = logos-cpp-sdk.packages.${common.buildSystemFor system}.default;
       logosQtSdk = logos-qt-sdk.packages.${system}.default;
       # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
       # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
-      logosQtGenerator = logos-qt-sdk.packages.${system}.logos-qt-generator;
+      logosQtGenerator = logos-qt-sdk.packages.${common.buildSystemFor system}.logos-qt-generator;
       logosProtocolPkg = logos-protocol.packages.${system}.default;
       logosModule = logos-module.packages.${system}.default;
 
@@ -329,7 +404,12 @@ let
         else if logos-rust-sdk == null
         then throw "codegen.rust module '${config.name}' requires logos-module-builder to be built with a logos-rust-sdk input (it provides the lidl-gen generator + the SDK source). Update the builder."
         else logos-rust-sdk;
-      rustGen = if !isRustModule then null else rustSdk.packages.${system}.lidl-gen;
+      # lidl-gen is a build-time TOOL: it runs on the builder to emit the Rust
+      # scaffold. Resolving it from the TARGET set asks logos-rust-sdk for an
+      # x86_64-windows attribute it does not publish -- and which would be an
+      # unrunnable PE if it did. buildSystemFor is the identity natively.
+      rustGen = if !isRustModule then null
+                else rustSdk.packages.${common.buildSystemFor system}.lidl-gen;
 
       # The dep contracts that feed the Rust generator: the same resolved
       # concrete + interface deps the C++ generator gets. Concrete deps →
@@ -401,7 +481,7 @@ let
 
       rustStaticLib =
         if !isRustModule then null
-        else rustPlatform.buildRustPackage {
+        else rustPlatform.buildRustPackage ({
           pname = rustStaticName;
           version = config.version;
           src = rustCrateSrc;
@@ -413,11 +493,34 @@ let
           # External system build deps for the crate compile — from metadata
           # `nix.rust` plus the programmatic escape-hatch args. Empty by default,
           # so modules with no native deps build exactly as before.
-          nativeBuildInputs = rustNativeBuildPkgs ++ rustExtraNativeBuildInputs;
+          nativeBuildInputs = rustNativeBuildPkgs ++ rustExtraNativeBuildInputs
+            # The cc-rs / linker wiring above names the cross compiler by store
+            # path, but build scripts also expect it on PATH.
+            ++ lib.optional (rustCrossTarget != null) pkgs.stdenv.cc;
           buildInputs = rustBuildPkgs ++ rustExtraBuildInputs;
-          env = config.nix_rust.env // rustEnv;
+          env = config.nix_rust.env // rustEnv // rustCrossEnv;
           doCheck = false;
-        };
+        }
+        # nixpkgs' cargoBuildHook derives `--target` from the stdenv's HOST
+        # platform, and this derivation deliberately runs in the BUILD
+        # platform's stdenv (see rustPlatform above) so that the toolchain is
+        # runnable. Left alone it therefore builds for the BUILDER -- silently,
+        # producing a perfectly good Linux archive that then fails to link into
+        # a PE. Drive cargo directly for the cross case instead.
+        // lib.optionalAttrs (rustCrossTarget != null) {
+          buildPhase = ''
+            runHook preBuild
+            export CARGO_HOME=$TMPDIR/cargo
+            cargo build --release --offline --target ${rustCrossTarget}
+            runHook postBuild
+          '';
+          installPhase = ''
+            runHook preInstall
+            mkdir -p $out/lib
+            cp target/${rustCrossTarget}/release/lib${rustStaticName}.a $out/lib/
+            runHook postInstall
+          '';
+        });
 
       # Stage the compiled staticlib where LogosModule.cmake's
       # LOGOS_MODULE_RUST_STATIC_LIBS block finds it (the plugin build's lib/).
@@ -482,13 +585,37 @@ let
         # The backend only knows about Qt + logosModule (interface.h).
         # SDK (generator, lib, headers) is injected via extra* args.
         in ({
-          inherit pkgs src config postInstall logosModule;
+          inherit pkgs src config logosModule;
+          postInstall = stageIncludedRuntimeFiles + postInstall;
           preConfigure = preConfigureStr;
           moduleDeps = resolvedModuleDeps;
           inherit externalLibs;
-          extraNativeBuildInputs = extraNativeBuildInputs ++ buildPkgs ++ [ logosSdk logosQtGenerator pkgs.jq ];
-          extraBuildInputs = extraBuildInputs ++ runtimePkgs ++ [ logosQtSdk logosProtocolPkg ];
-          extraCmakeFlags = [
+          # pkgs.jq is target-typed too and jq runs in preConfigure
+          # (modulePreConfigure.nix:203). buildPackages == pkgs natively.
+          extraNativeBuildInputs = extraNativeBuildInputs ++ buildPkgs ++ [ logosSdkBuild logosQtGenerator pkgs.buildPackages.jq ];
+          extraBuildInputs = extraBuildInputs ++ runtimePkgs ++ [ logosQtSdk logosProtocolPkg ]
+            # A Rust staticlib's vendored C may want winpthreads: with <sched.h>
+            # reachable, aws-lc-sys compiles aws-lc's thread_pthread.c and the
+            # plugin link then needs pthread_rwlock_*, pthread_once, sched_yield.
+            # aws-lc assumes the standard mingw environment, where winpthreads is
+            # simply present; nixpkgs builds mingw against mcfgthread, so it is a
+            # separate package on no default path. As a buildInput its lib/ lands
+            # on NIX_LDFLAGS, which is what lets the `pthread` named by
+            # LogosModule.cmake's WIN32 branch resolve.
+            #
+            # Cross Rust modules only, and free for the ones that do not need it:
+            # ld pulls archive members on demand, so a module referencing no
+            # pthread symbol links exactly as before.
+            ++ lib.optional (isRustModule && rustCrossTarget != null) pkgs.windows.pthreads;
+          # Qt splits each module's TOOLS (repc, moc, qmltyperegistrar) into a
+          # SEPARATE package that must run on the BUILD machine. Without these
+          # flags find_package(Qt6 COMPONENTS RemoteObjects) fails on a
+          # thoroughly misleading message -- it names Qt6RemoteObjects, but the
+          # TARGET config is found fine; it is Qt6RemoteObjectsTools that is
+          # missing. logos-nix's Windows overlay exposes the flags; the
+          # attribute is absent (and so `or []`) on a native build, which is why
+          # this needs no isWindows guard.
+          extraCmakeFlags = (pkgs.logosQtCrossCmakeFlags or [ ]) ++ [
             "-DLOGOS_CPP_SDK_ROOT=${logosSdk}"
             "-DLOGOS_QT_SDK_ROOT=${logosQtSdk}"
             "-DLOGOS_PROTOCOL_ROOT=${logosProtocolPkg}"
@@ -545,15 +672,41 @@ let
       # through QVariant, so never actually Qt-free — used to be built here.
       # `buildPlugin.nix` only ever selects "qt" or "lp", so it had no
       # consumer; it was retired rather than rebuilt for every module.)
+      # The contract buildHeaders falls back to when it cannot introspect the
+      # built plugin (cross-compilation — a Linux builder cannot load a PE).
+      # Preference order:
+      #   1. this module's published `lidl` output (universal + cdylib), then
+      #   2. a contract committed at src/<name>.lidl.
+      # (2) is the escape hatch for handcrafted Qt / `interface: "legacy"`
+      # modules, which derive no contract from their sources. It is deliberately
+      # NOT folded into `moduleLidl` below: publishing a `lidl` output flips
+      # every downstream consumer of this module from the transitional
+      # header-copy path onto `--dep` (see depIsLidl above), which would change
+      # native builds across the tree. This binding is consumed by buildHeaders
+      # ALONE, and buildHeaders only reads it when cross-compiling.
+      committedLidl = src + "/src/${config.name}.lidl";
+      headerContractLidl =
+        if moduleLidl != null then "${moduleLidl}/${config.name}.lidl"
+        else if builtins.pathExists committedLidl then "${committedLidl}"
+        else null;
+
       moduleIncludeQt = selectedBackend.buildHeaders {
-        inherit pkgs src config logosSdk;
+        inherit pkgs src config;
+        # buildHeaders uses this ONLY to put the generator on PATH
+        # (logos-plugin-qt/lib/buildHeaders.nix:44) -- a pure tool role.
+        logosSdk = logosSdkBuild;
         pluginLib = moduleLib;
         apiStyle = "qt";
+        contractLidl = headerContractLidl;
       };
       moduleIncludeLp = selectedBackend.buildHeaders {
-        inherit pkgs src config logosSdk;
+        inherit pkgs src config;
+        # buildHeaders uses this ONLY to put the generator on PATH
+        # (logos-plugin-qt/lib/buildHeaders.nix:44) -- a pure tool role.
+        logosSdk = logosSdkBuild;
         pluginLib = moduleLib;
         apiStyle = "lp";
+        contractLidl = headerContractLidl;
       };
 
       # Publish this module's interface as LIDL — the language-neutral contract
@@ -568,7 +721,7 @@ let
       moduleLidl =
         if config.interface == "universal"
         then pkgs.runCommand "logos-${config.name}-lidl" {
-               nativeBuildInputs = [ logosSdk ];
+               nativeBuildInputs = [ logosSdkBuild ];
              } ''
                mkdir -p $out
                logos-cpp-generator --header-to-lidl "${src}/${lidlImplHeaderRel}" \
@@ -645,12 +798,27 @@ let
   # Development shell (delegates to backend for deps)
   devShells = forAllSystems (system:
     let
-      pkgs = import nixpkgs { inherit system; };
+      pkgs = common.mkPkgs system;
       logosSdk = logos-cpp-sdk.packages.${system}.default;
+      # Build-platform half of the SDK. logos-cpp-generator is invoked by BARE
+      # NAME from a build phase (logos-plugin-qt/lib/buildPlugin.nix:145), so it
+      # must run on the builder. Under cross, packages.x86_64-windows.default
+      # carries no runnable generator at all -- logos-cpp-sdk/nix/bin.nix:39
+      # silently skips the mingw .exe -- hence "command not found".
+      #
+      # `logosSdk` deliberately stays TARGET-typed: it is ALSO the header and
+      # CMake-package root passed to LOGOS_CPP_SDK_ROOT, and those must keep
+      # coming from the Windows set. Splitting the two roles is the whole point;
+      # pointing the headers at the build system would produce a build that
+      # SUCCEEDS while linking the wrong architecture.
+      #
+      # buildSystemFor is the identity on every native system, so this is a
+      # no-op off the Windows target.
+      logosSdkBuild = logos-cpp-sdk.packages.${common.buildSystemFor system}.default;
       logosQtSdk = logos-qt-sdk.packages.${system}.default;
       # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
       # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
-      logosQtGenerator = logos-qt-sdk.packages.${system}.logos-qt-generator;
+      logosQtGenerator = logos-qt-sdk.packages.${common.buildSystemFor system}.logos-qt-generator;
       logosProtocolPkg = logos-protocol.packages.${system}.default;
       logosModule = logos-module.packages.${system}.default;
 
@@ -683,7 +851,7 @@ let
         (lib.mapAttrs resolveExtInputDev externalLibInputs);
     in {
       default = pkgs.mkShell {
-        nativeBuildInputs = backendShell.nativeBuildInputs ++ buildPkgs ++ [ logosSdk ];
+        nativeBuildInputs = backendShell.nativeBuildInputs ++ buildPkgs ++ [ logosSdkBuild ];
         buildInputs = backendShell.buildInputs ++ runtimePkgs ++ lib.attrValues devExternalLibs;
         shellHook = ''
           ${backendShell.shellHook}
@@ -738,7 +906,7 @@ let
     else {
       apps = forAllSystems (system:
         let
-          pkgs = import nixpkgs { inherit system; };
+          pkgs = common.mkPkgs system;
           # Collect all module dependencies (direct + transitive) for bundling
           allDeps = common.collectAllModuleDeps system flakeInputs config.dependencies;
         in {
