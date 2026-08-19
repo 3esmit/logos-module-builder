@@ -2,7 +2,7 @@
   description = "External Library Module — wraps a pre-built or vendored C/C++ library";
 
   inputs = {
-    logos-module-builder.url = "github:logos-co/logos-module-builder";
+    logos-module-builder.url = "github:3esmit/logos-module-builder";
 
     # If your external library is a flake input (source to be built by Nix),
     # add it here and pass it via externalLibInputs below.
