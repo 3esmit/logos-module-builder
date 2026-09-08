@@ -1,26 +1,11 @@
 # LogosModule.cmake
 # Reusable CMake module for building Logos plugins
 # This handles all the boilerplate configuration for Logos modules
-#
-# THIS IS THE ONLY COPY. Do not fork it into a backend repo.
-#
-# logos-plugin-qt used to ship a second copy, and because
-# buildCppPlugin.nix set LOGOS_MODULE_BUILDER_ROOT only when the MODULE's own
-# repo carried a cmake/LogosModule.cmake (no module does), the two were
-# selected by module type: every ui_qml plugin configured with the backend's
-# copy while every core module configured with this one. Both compiled, so the
-# divergence was invisible — it is how a stale generator, a stale host-runtime
-# repoint, and a missing source file each shipped green. Both nix entry points
-# (mkLogosModule and buildCppPlugin) now point LOGOS_MODULE_BUILDER_ROOT here
-# unconditionally; `logos_module()` echoes the file it came from so a future
-# fork shows up in any configure log.
 
 cmake_minimum_required(VERSION 3.14)
 
 include(GNUInstallDirs)
 
-# Enable CMake automoc for Qt
-set(CMAKE_AUTOMOC ON)
 
 #[=======================================================================[.rst:
 logos_find_dependencies
@@ -226,13 +211,13 @@ endfunction()
 logos_find_qt
 -------------
 
-Find Qt6 (or Qt5 as fallback) with required components.
+Find Qt6 with required components.
 
 Usage:
   logos_find_qt()
 
 Sets:
-  QT_VERSION_MAJOR - The major Qt version found (5 or 6)
+  QT_VERSION_MAJOR - The required major Qt version (6)
 #]=======================================================================]
 # NOTE: this MUST be a macro, not a function. Qt's mingw
 # Qt6EntryPointMinGW32Target.cmake guards itself with a bare include_guard()
@@ -243,15 +228,15 @@ Sets:
 # logos-qt-sdk's find_dependency) re-enters and hits
 # "add_library cannot create imported target EntryPointMinGW32".
 macro(logos_find_qt)
-    if(NOT DEFINED QT_VERSION_MAJOR)
-        find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core RemoteObjects)
-        if(Qt6_FOUND)
-            set(QT_VERSION_MAJOR 6)
-        else()
-            set(QT_VERSION_MAJOR 5)
-        endif()
+    if(NOT DEFINED CMAKE_CXX_STANDARD)
+        set(CMAKE_CXX_STANDARD 17)
+    elseif(CMAKE_CXX_STANDARD STREQUAL "98" OR CMAKE_CXX_STANDARD LESS 17)
+        message(FATAL_ERROR "logos_find_qt: Qt 6.8 requires CMAKE_CXX_STANDARD >= 17 (got ${CMAKE_CXX_STANDARD})")
     endif()
-    find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core RemoteObjects)
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
+    find_package(Qt6 6.8 REQUIRED COMPONENTS Core RemoteObjects)
+    qt_standard_project_setup()
+    set(QT_VERSION_MAJOR 6)
 endmacro()
 
 #[=======================================================================[.rst:
@@ -306,7 +291,7 @@ function(logos_module)
     cmake_parse_arguments(
         MODULE
         ""
-        "NAME;REP_FILE;QML_URI;QML_TYPE_NAME"
+        "NAME;PROVIDER_HEADER;REP_FILE;QML_URI;QML_TYPE_NAME"
         "SOURCES;EXTERNAL_LIBS;FIND_PACKAGES;LINK_LIBRARIES;LINK_TARGETS;AUTOGEN_DEPENDS;INCLUDE_DIRS"
         ${ARGN}
     )
@@ -436,20 +421,38 @@ function(logos_module)
         endif()
     endif()
 
-    # Universal UI backends (type: ui_qml + interface: universal): the
-    # generated glue plugin — derived from the impl class by
-    # logos-qt-generator, carrying Q_PLUGIN_METADATA and the initLogos
-    # wiring — must be compiled into the target (the .h rides along so
-    # AUTOMOC picks up the plugin metadata).
+    # Provider-header code generation (new LogosProviderBase API)
+    if(MODULE_PROVIDER_HEADER)
+        set(_PROVIDER_HEADER_ABS "${CMAKE_CURRENT_SOURCE_DIR}/${MODULE_PROVIDER_HEADER}")
+        set(_PROVIDER_DISPATCH "${PLUGINS_OUTPUT_DIR}/logos_provider_dispatch.cpp")
+
+        if(LOGOS_CPP_SDK_IS_SOURCE)
+            add_custom_command(
+                OUTPUT "${_PROVIDER_DISPATCH}"
+                COMMAND "${CPP_GENERATOR}" --provider-header "${_PROVIDER_HEADER_ABS}"
+                        --output-dir "${PLUGINS_OUTPUT_DIR}"
+                DEPENDS "${_PROVIDER_HEADER_ABS}"
+                WORKING_DIRECTORY "${LOGOS_DEPS_ROOT}"
+                COMMENT "Generating provider dispatch for ${MODULE_NAME}"
+                VERBATIM
+            )
+        endif()
+
+        if(EXISTS "${_PROVIDER_DISPATCH}" OR LOGOS_CPP_SDK_IS_SOURCE)
+            list(APPEND PLUGIN_SOURCES "${_PROVIDER_DISPATCH}")
+            set_source_files_properties("${_PROVIDER_DISPATCH}" PROPERTIES GENERATED TRUE)
+        endif()
+    endif()
+
+    # UI backends use the same builder-owned CMake path as core modules.
     if(EXISTS "${PLUGINS_OUTPUT_DIR}/${MODULE_NAME}_ui_glue.cpp")
         list(APPEND PLUGIN_SOURCES
             ${PLUGINS_OUTPUT_DIR}/${MODULE_NAME}_ui_glue.cpp
             ${PLUGINS_OUTPUT_DIR}/${MODULE_NAME}_ui_glue.h)
     endif()
 
-
-    # Create the plugin library
-    add_library(${MODULE_NAME}_module_plugin SHARED ${PLUGIN_SOURCES})
+    # Preserve the shared-library ABI used by module loaders and link consumers.
+    qt_add_library(${MODULE_NAME}_module_plugin SHARED MANUAL_FINALIZATION ${PLUGIN_SOURCES})
 
     # Pre-generated sources from logos-cpp-generator (Nix preConfigure, universal/provider modules)
     set(_LOGOS_GEN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/generated_code")
@@ -542,42 +545,10 @@ function(logos_module)
             ${LOGOS_QT_HOST_ROOT}/include/core
         )
     endif()
-    # logos_ui_plugin_context.h, from logos-view-module — and FIRST, ahead of
-    # the logos-qt-sdk root below.
-    #
-    # As of the qt-sdk pin above, logos-view-module is the ONLY repo that ships
-    # this header, so ordering is no longer what decides which copy wins. It
-    # stays BEFORE anyway: this repo pins the two independently, and an older
-    # qt-sdk pin — a rollback, a branch, a consumer overriding the input — brings
-    # the duplicate straight back. Belt-and-braces now, load-bearing again the
-    # moment those pins disagree. This header and the view glue emitter are one MATCHED PAIR: the
-    # emitted `<name>_ui_glue.cpp` calls
-    # `_logos_codegen_::maybeUiPluginAboutToUnload(...)`, which only this header
-    # declares. Both now ship from logos-view-module under ONE pin, so they
-    # cannot disagree. logos-qt-sdk's copy is pinned SEPARATELY by this repo's
-    # flake.lock and drifts independently — resolving to it is how a build gets
-    # an emitter from one revision and a context header from another, and the
-    # symptom is a compile error inside generated code, far from the pin that
-    # caused it.
-    #
-    # Passed as a cache variable by every nix build (LOGOS_VIEW_INCLUDE_DIR) and
-    # as an env var for a hand-run cmake in a dev shell, the same two channels
-    # LOGOS_VIEW_TEMPLATE_DIR uses.
-    if(NOT LOGOS_VIEW_INCLUDE_DIR AND DEFINED ENV{LOGOS_VIEW_INCLUDE_DIR})
-        set(LOGOS_VIEW_INCLUDE_DIR "$ENV{LOGOS_VIEW_INCLUDE_DIR}")
-    endif()
-    if(LOGOS_VIEW_INCLUDE_DIR)
-        # BEFORE, not the default append: a stale logos_ui_plugin_context.h on
-        # the qt-sdk root must lose, not win by accident of ordering.
-        target_include_directories(${MODULE_NAME}_module_plugin BEFORE PRIVATE
-            ${LOGOS_VIEW_INCLUDE_DIR}/include
-        )
-    endif()
     # The Qt-typed headers logos-qt-sdk owns — logos_qt_lp_bridge.h /
-    # logos_qt_wire.h (emitted by name into generated Qt consumer wrappers).
-    # It no longer ships logos_ui_plugin_context.h; logos-view-module is its sole
-    # owner, and the block above stays ordered ahead of this one so an older
-    # qt-sdk pin that still carries a copy cannot win.
+    # logos_qt_wire.h (emitted by name into generated Qt consumer wrappers) and
+    # logos_ui_plugin_context.h. The two roots no longer share a header name, so
+    # the ordering against the host runtime's dirs is no longer load-bearing.
     if(NOT "${LOGOS_QT_SDK_ROOT}" STREQUAL "${LOGOS_QT_HOST_ROOT}")
         if(LOGOS_QT_SDK_IS_SOURCE)
             target_include_directories(${MODULE_NAME}_module_plugin PRIVATE
@@ -847,56 +818,6 @@ function(logos_module)
         endforeach()
     endif()
 
-    # Nim static archives. Set by mkLogosModule when a cdylib module is authored
-    # in Nim (metadata codegen.nim): the builder compiles the Nim sources to a
-    # staticlib and stages it in lib/. The archive provides the logos_module_*
-    # exports the generated glue calls; its lp_*/protocol undefineds resolve
-    # against logos-protocol (re-mentioned after the archive for single-pass
-    # linkers). Plain link — the Nim runtime is initialised by a load-time
-    # constructor in the archive, not whole-archive inclusion. Nim's stdlib
-    # leaves pthread/dl/m undefined in a staticlib.
-    if(DEFINED LOGOS_MODULE_NIM_STATIC_LIBS AND NOT LOGOS_MODULE_NIM_STATIC_LIBS STREQUAL "")
-        set(_LOGOS_NIM_LIB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lib")
-        foreach(_nimlib IN LISTS LOGOS_MODULE_NIM_STATIC_LIBS)
-            if(_nimlib STREQUAL "")
-                continue()
-            endif()
-            find_library(_LOGOS_NIM_${_nimlib}
-                NAMES lib${_nimlib}.a ${_nimlib}
-                PATHS ${_LOGOS_NIM_LIB_DIR} NO_DEFAULT_PATH)
-            if(_LOGOS_NIM_${_nimlib})
-                target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE ${_LOGOS_NIM_${_nimlib}})
-                if(TARGET logos-protocol::logos_protocol)
-                    target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE logos-protocol::logos_protocol)
-                elseif(TARGET logos_protocol)
-                    target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE logos_protocol)
-                endif()
-                if(APPLE)
-                    target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE pthread)
-                else()
-                    target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE pthread dl m)
-                endif()
-                # External libraries the Nim staticlib's FFI references (metadata
-                # codegen.nim.link) — e.g. secp256k1 — linked AFTER the archive so
-                # its undefined symbols resolve. Their lib dirs come from
-                # nix.packages.runtime (plugin buildInputs → NIX_LDFLAGS).
-                if(DEFINED LOGOS_MODULE_NIM_LINK_LIBS AND NOT LOGOS_MODULE_NIM_LINK_LIBS STREQUAL "")
-                    foreach(_nl IN LISTS LOGOS_MODULE_NIM_LINK_LIBS)
-                        if(NOT _nl STREQUAL "")
-                            target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE ${_nl})
-                        endif()
-                    endforeach()
-                endif()
-            else()
-                message(FATAL_ERROR
-                    "Nim static library '${_nimlib}' (a codegen.nim module) was not "
-                    "found in ${_LOGOS_NIM_LIB_DIR}. The builder stages the compiled "
-                    "staticlib there before the plugin link; this usually means the "
-                    "Nim build or staging step did not run.")
-            endif()
-        endforeach()
-    endif()
-
     # Link additional libraries
     foreach(lib ${MODULE_LINK_LIBRARIES})
         target_link_libraries(${MODULE_NAME}_module_plugin PRIVATE ${lib})
@@ -950,33 +871,39 @@ function(logos_module)
             "${MODULE_QML_URI}" "${MODULE_QML_TYPE_NAME}")
     endif()
 
+    # Qt package variables are local to this function. Finalize before they
+    # leave scope; deferred finalization otherwise loses the moc target name.
+    qt_finalize_target(${MODULE_NAME}_module_plugin)
     message(STATUS "Logos module ${MODULE_NAME} configured successfully")
+endfunction()
+
+# Match a declaration, never a class name mentioned in migration comments.
+function(_logos_parse_rep_class REP_FILE OUT_VAR)
+    file(READ "${REP_FILE}" _REP_CONTENTS)
+    # Strip both styles in one pass so delimiters inside a comment stay inert.
+    string(REGEX REPLACE "//[^\r\n]*|/\\*([^*]|\\*+[^*/])*\\*+/" " " _REP_CONTENTS "${_REP_CONTENTS}")
+    string(REGEX MATCH "(^|[\r\n])[ \t]*class[ \t]+([A-Za-z_][A-Za-z0-9_]*)" _ "${_REP_CONTENTS}")
+    if(NOT CMAKE_MATCH_2)
+        message(FATAL_ERROR "logos_module: could not parse class name from ${REP_FILE}")
+    endif()
+    set(${OUT_VAR} "${CMAKE_MATCH_2}" PARENT_SCOPE)
 endfunction()
 
 # ── Internal: build a <name>_replica_factory Qt plugin from a .rep file ─────
 function(_logos_module_add_replica_factory MODULE_NAME REP_FILE QML_URI QML_TYPE_NAME)
     # Need repc replica generation + Qml for qmlRegisterUncreatableMetaObject
-    find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core RemoteObjects Qml)
+    find_package(Qt6 6.8 REQUIRED COMPONENTS Core RemoteObjects Qml)
 
     # Also attach the source-side repc to the plugin target so the backend has
     # the generated SimpleSource base class available.
-    if(QT_VERSION_MAJOR EQUAL 6)
-        qt6_add_repc_sources(${MODULE_NAME}_module_plugin ${REP_FILE})
-    else()
-        qt5_add_repc_sources(${MODULE_NAME}_module_plugin ${REP_FILE})
-    endif()
+    qt_add_repc_sources(${MODULE_NAME}_module_plugin ${REP_FILE})
 
     # Parse class name out of the .rep (first `class Foo` line).
     set(_REP_FILE_ABS "${REP_FILE}")
     if(NOT IS_ABSOLUTE "${_REP_FILE_ABS}")
         set(_REP_FILE_ABS "${CMAKE_CURRENT_SOURCE_DIR}/${REP_FILE}")
     endif()
-    file(READ "${_REP_FILE_ABS}" _REP_CONTENTS)
-    string(REGEX MATCH "class[ \t]+([A-Za-z_][A-Za-z0-9_]*)" _ "${_REP_CONTENTS}")
-    set(LOGOS_REP_CLASS "${CMAKE_MATCH_1}")
-    if(NOT LOGOS_REP_CLASS)
-        message(FATAL_ERROR "logos_module: could not parse class name from ${REP_FILE}")
-    endif()
+    _logos_parse_rep_class("${_REP_FILE_ABS}" LOGOS_REP_CLASS)
 
     get_filename_component(LOGOS_REP_BASE "${REP_FILE}" NAME_WE)
     set(LOGOS_FACTORY_CLASS "${LOGOS_REP_CLASS}ReplicaFactoryPlugin")
@@ -1061,7 +988,7 @@ function(_logos_module_add_replica_factory MODULE_NAME REP_FILE QML_URI QML_TYPE
     )
 
     set(_FACTORY_TARGET ${MODULE_NAME}_replica_factory)
-    add_library(${_FACTORY_TARGET} SHARED
+    qt_add_library(${_FACTORY_TARGET} SHARED MANUAL_FINALIZATION
         "${_GEN_DIR}/LogosViewReplicaFactory.h"
         "${_GEN_DIR}/LogosViewReplicaFactory.cpp"
     )
@@ -1084,11 +1011,7 @@ function(_logos_module_add_replica_factory MODULE_NAME REP_FILE QML_URI QML_TYPE
         "${_GEN_DIR}"
         "${CMAKE_CURRENT_BINARY_DIR}"
     )
-    if(QT_VERSION_MAJOR EQUAL 6)
-        qt6_add_repc_replicas(${_FACTORY_TARGET} ${REP_FILE})
-    else()
-        qt5_add_repc_replicas(${_FACTORY_TARGET} ${REP_FILE})
-    endif()
+    qt_add_repc_replicas(${_FACTORY_TARGET} ${REP_FILE})
 
     target_link_libraries(${_FACTORY_TARGET} PRIVATE
         Qt${QT_VERSION_MAJOR}::Core
@@ -1120,6 +1043,7 @@ function(_logos_module_add_replica_factory MODULE_NAME REP_FILE QML_URI QML_TYPE
         ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}/logos/modules
     )
 
+    qt_finalize_target(${_FACTORY_TARGET})
     message(STATUS "Logos module ${MODULE_NAME}: replica factory plugin from ${REP_FILE} "
                    "(class ${LOGOS_REP_CLASS}, QML ${LOGOS_QML_URI}.${LOGOS_QML_TYPE_NAME})")
 endfunction()
