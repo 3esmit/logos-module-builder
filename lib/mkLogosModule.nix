@@ -486,7 +486,7 @@ let
           version = config.version;
           src = rustCrateSrc;
           sourceRoot = "logos-${config.name}-rust-src/rust-lib";
-          cargoLock = {
+          cargoDeps = (import ./importCargoLock.nix { inherit pkgs rustPlatform; }) {
             lockFile = "${rustCrateDir}/Cargo.lock";
             allowBuiltinFetchGit = true;
           };
