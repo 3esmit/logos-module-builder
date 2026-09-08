@@ -156,7 +156,7 @@
         default = import ./tests {
           inherit pkgs;
           inherit (nixpkgs) lib;
-          inherit (lib) parseMetadata common mkExternalLib;
+          inherit (lib) parseMetadata common mkExternalLib mkLogosModule mkLogosQmlModule;
           validationChecks = [
             self.checks.${system}.rust-crate-downloads
             self.checks.${system}.ui-sdk-inputs

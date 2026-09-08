@@ -387,6 +387,8 @@ let
 
 in {
   packages = mergedPackages;
+  # Preserve dependency inputs when this result is passed to another module.
+  moduleInputs = flakeInputs;
   checks = lib.mapAttrs (_: sysPkgs: {
     integration-test = sysPkgs.integration-test;
   }) integrationTestPackages;

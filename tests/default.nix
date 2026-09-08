@@ -1,7 +1,7 @@
 # Test runner for logos-module-builder
 # Unit assertions are pure Nix evaluation; validationChecks adds boundary probes.
 # Usage: nix build .#checks.<system>.default
-{ pkgs, lib, parseMetadata, common, mkExternalLib, fixturesRoot ? ./fixtures, validationChecks ? [] }:
+{ pkgs, lib, parseMetadata, common, mkExternalLib, mkLogosModule, mkLogosQmlModule, fixturesRoot ? ./fixtures, validationChecks ? [] }:
 
 let
   # Helper: assert with message. Throws on failure.
@@ -30,11 +30,12 @@ let
   externalLibTests = import ./test-external-lib.nix { inherit assertEq assertBool mkExternalLib; };
   templateTests = import ./test-templates.nix { inherit assertEq assertBool assertHasAttr parseMetadata; builderRoot = ./..; };
   collectDepsTests = import ./test-collectAllModuleDeps.nix { inherit assertEq assertBool assertHasAttr common; };
+  composedDepsTests = import ./test-composed-module-deps.nix { inherit assertEq common mkLogosModule mkLogosQmlModule fixturesRoot; };
   fixtureTests = import ./test-fixtures.nix { inherit assertEq assertBool assertHasAttr parseMetadata fixturesRoot; };
   hostCodegenTests = import ./test-host-codegen.nix { inherit lib assertBool parseMetadata; };
 
   # Collect all test results into a list of bools (all must be true)
-  allTests = parseMetadataTests ++ commonTests ++ externalLibTests ++ templateTests ++ collectDepsTests ++ fixtureTests ++ hostCodegenTests;
+  allTests = parseMetadataTests ++ commonTests ++ externalLibTests ++ templateTests ++ collectDepsTests ++ composedDepsTests ++ fixtureTests ++ hostCodegenTests;
 
   # Force evaluation of all tests
   allPassed = builtins.deepSeq allTests (builtins.length allTests);

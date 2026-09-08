@@ -1258,6 +1258,8 @@ let
 
 in {
   packages = finalPackages;
+  # Composed modules need the dependency graph normally supplied by flake inputs.
+  moduleInputs = flakeInputs;
   inherit devShells config;
   # The RESOLVED config, per target. `config` above cannot answer for a
   # platform-keyed field and says so when asked; a consumer that needs

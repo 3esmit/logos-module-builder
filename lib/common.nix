@@ -74,7 +74,7 @@ let
             if input ? configFor && input.configFor ? ${system}
             then input.configFor.${system}.dependencies or []
             else (input.config or {}).dependencies or [];
-          tinputs = input.inputs or {};
+          tinputs = input.moduleInputs or (input.inputs or {});
         in
           if tdeps == [] then acc
           else acc // (collectAllModuleDeps system tinputs tdeps)
