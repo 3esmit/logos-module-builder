@@ -57,7 +57,7 @@
     nixpkgs.follows = "logos-nix/nixpkgs";
   };
 
-  outputs = { self, nixpkgs, logos-nix, logos-cpp-sdk, logos-protocol, logos-qt-sdk, logos-module, logos-plugin-qt, logos-plugin-core, logos-view-module, nix-bundle-logos-module-install, nix-bundle-lgx, logos-standalone-app, logos-test-framework, logos-rust-sdk, rust-overlay ? null, ... }:
+  outputs = inputs@{ self, nixpkgs, logos-nix, logos-cpp-sdk, logos-protocol, logos-qt-sdk, logos-module, logos-plugin-qt, logos-plugin-core, logos-view-module, nix-bundle-logos-module-install, nix-bundle-lgx, logos-standalone-app, logos-test-framework, logos-rust-sdk, rust-overlay ? null, ... }:
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
 
@@ -129,6 +129,7 @@
           validationChecks = [
             self.checks.${system}.qt-host-repoint
             self.checks.${system}.host-codegen-wiring
+            self.checks.${system}.qt-input-contract
           ];
         };
         # Integration test: actually builds a QML module from a fixture
@@ -155,6 +156,9 @@
         host-codegen-wiring = import ./tests/test-host-codegen-wiring.nix {
           inherit pkgs logos-plugin-qt;
           inherit (lib) common mkLogosModule mkLogosQmlModule;
+        };
+        qt-input-contract = import ./tests/test-qt-input-contract.nix {
+          inherit pkgs inputs;
         };
         # Integration test: a Rust cdylib module with an external system build dep
         # declared via the `nix.rust` block — proves pkg-config/openssl-style deps

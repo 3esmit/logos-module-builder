@@ -25,6 +25,15 @@ let
     src = commentedBackend;
     configFile = ../templates/ui-qml-backend/metadata.json;
   }).packages.${system};
+  bomBackend = pkgs.runCommand "bom-ui-backend" {} ''
+    cp -r ${../templates/ui-qml-backend} $out
+    chmod -R u+w $out
+    cp ${./fixtures/bom-ui.rep} $out/src/ui_example.rep
+  '';
+  bom = (mkLogosQmlModule {
+    src = bomBackend;
+    configFile = ../templates/ui-qml-backend/metadata.json;
+  }).packages.${system};
   core = (mkLogosModule {
     src = ../templates/minimal-module;
     configFile = ../templates/minimal-module/metadata.json;
@@ -44,6 +53,8 @@ in pkgs.runCommand "qml-integration-tests" {
   test -f ${backend.lib}/lib/ui_example_plugin.${extension}
   test -f ${backend.lib}/lib/ui_example_replica_factory.${extension}
   test -f ${backend.generate}/generated_code/ui_example_ui_glue.cpp
+  test -f ${bom.lib}/lib/ui_example_plugin.${extension}
+  test -f ${bom.lib}/lib/ui_example_replica_factory.${extension}
   test -n "$(find ${core.lgx} -name '*.lgx' -print -quit)"
   test -n "$(find ${backend.lgx} -name '*.lgx' -print -quit)"
   echo "PASS: core and QML backend compile, generate, and package"
