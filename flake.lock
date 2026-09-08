@@ -27457,17 +27457,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1786136791,
-        "narHash": "sha256-eJ9BeWRg0Ou+EjE2L1N0PbTsDebCbBqJvJC8MJYgI38=",
+        "lastModified": 1787192832,
+        "narHash": "sha256-OOKWEtVLRZ0an2mMLGb/V1bCwVnW/vJkzNqln5KQvN0=",
         "owner": "logos-co",
         "repo": "logos-rust-sdk",
-        "rev": "0b4b8edd5127378b78890297f5fcec738b81f8e2",
+        "rev": "a3d0d719e396bb5a8805527eb88702bcb400d2e5",
         "type": "github"
       },
       "original": {
         "owner": "logos-co",
         "repo": "logos-rust-sdk",
-        "rev": "0b4b8edd5127378b78890297f5fcec738b81f8e2",
+        "rev": "a3d0d719e396bb5a8805527eb88702bcb400d2e5",
         "type": "github"
       }
     },

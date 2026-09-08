@@ -41,7 +41,7 @@
     # logos-module-builder input is cut with `follows` to break the cycle — we
     # only consume its lidl-gen package + source tree, never its tests. The other
     # branch-pinned test-only inputs are cut too so they aren't fetched.
-    logos-rust-sdk.url = "github:logos-co/logos-rust-sdk/0b4b8edd5127378b78890297f5fcec738b81f8e2";
+    logos-rust-sdk.url = "github:logos-co/logos-rust-sdk/a3d0d719e396bb5a8805527eb88702bcb400d2e5";
     logos-rust-sdk.inputs.logos-nix.follows = "logos-nix";
     logos-rust-sdk.inputs.logos-module-builder.follows = "logos-cpp-sdk";
     logos-rust-sdk.inputs.logos-logoscore-cli.follows = "logos-cpp-sdk";
@@ -110,12 +110,18 @@
         };
       };
 
-      # Tests — pure Nix evaluation tests (no compilation)
+      # Unit contracts and native integration checks.
       checks = forAllSystems ({ pkgs, system, ... }: {
+        rust-module-load = import ./tests/test-rust-module-load.nix {
+          inherit pkgs;
+          mkLogosModule = lib.mkLogosModule;
+          fixturesRoot = ./tests/fixtures;
+        };
         default = import ./tests {
           inherit pkgs;
           inherit (nixpkgs) lib;
           inherit (lib) parseMetadata common mkExternalLib;
+          validationChecks = [ self.checks.${system}.rust-module-load ];
         };
         # Integration test: actually builds a QML module from a fixture
         qml-integration = import ./tests/test-qml-integration.nix {
