@@ -230,6 +230,8 @@ Sets:
 macro(logos_find_qt)
     if(NOT DEFINED CMAKE_CXX_STANDARD)
         set(CMAKE_CXX_STANDARD 17)
+    elseif(CMAKE_CXX_STANDARD STREQUAL "98" OR CMAKE_CXX_STANDARD LESS 17)
+        message(FATAL_ERROR "logos_find_qt: Qt 6.8 requires CMAKE_CXX_STANDARD >= 17 (got ${CMAKE_CXX_STANDARD})")
     endif()
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
     find_package(Qt6 6.8 REQUIRED COMPONENTS Core RemoteObjects)
@@ -875,6 +877,18 @@ function(logos_module)
     message(STATUS "Logos module ${MODULE_NAME} configured successfully")
 endfunction()
 
+# Match a declaration, never a class name mentioned in migration comments.
+function(_logos_parse_rep_class REP_FILE OUT_VAR)
+    file(READ "${REP_FILE}" _REP_CONTENTS)
+    # Strip both styles in one pass so delimiters inside a comment stay inert.
+    string(REGEX REPLACE "//[^\r\n]*|/\\*([^*]|\\*+[^*/])*\\*+/" " " _REP_CONTENTS "${_REP_CONTENTS}")
+    string(REGEX MATCH "(^|[\r\n])[ \t]*class[ \t]+([A-Za-z_][A-Za-z0-9_]*)" _ "${_REP_CONTENTS}")
+    if(NOT CMAKE_MATCH_2)
+        message(FATAL_ERROR "logos_module: could not parse class name from ${REP_FILE}")
+    endif()
+    set(${OUT_VAR} "${CMAKE_MATCH_2}" PARENT_SCOPE)
+endfunction()
+
 # ── Internal: build a <name>_replica_factory Qt plugin from a .rep file ─────
 function(_logos_module_add_replica_factory MODULE_NAME REP_FILE QML_URI QML_TYPE_NAME)
     # Need repc replica generation + Qml for qmlRegisterUncreatableMetaObject
@@ -889,12 +903,7 @@ function(_logos_module_add_replica_factory MODULE_NAME REP_FILE QML_URI QML_TYPE
     if(NOT IS_ABSOLUTE "${_REP_FILE_ABS}")
         set(_REP_FILE_ABS "${CMAKE_CURRENT_SOURCE_DIR}/${REP_FILE}")
     endif()
-    file(READ "${_REP_FILE_ABS}" _REP_CONTENTS)
-    string(REGEX MATCH "class[ \t]+([A-Za-z_][A-Za-z0-9_]*)" _ "${_REP_CONTENTS}")
-    set(LOGOS_REP_CLASS "${CMAKE_MATCH_1}")
-    if(NOT LOGOS_REP_CLASS)
-        message(FATAL_ERROR "logos_module: could not parse class name from ${REP_FILE}")
-    endif()
+    _logos_parse_rep_class("${_REP_FILE_ABS}" LOGOS_REP_CLASS)
 
     get_filename_component(LOGOS_REP_BASE "${REP_FILE}" NAME_WE)
     set(LOGOS_FACTORY_CLASS "${LOGOS_REP_CLASS}ReplicaFactoryPlugin")

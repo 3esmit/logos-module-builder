@@ -14,8 +14,15 @@ let
 
   # QML-only default uses lib/ layout (Main.qml + metadata.json under lib/).
   defaultPkg = qmlResult.packages.${system}.default;
+  # Exercise the real generators and factory compiler with misleading class
+  # names inside both comment styles, not just a standalone regex assertion.
+  commentedBackend = pkgs.runCommand "commented-ui-backend" {} ''
+    cp -r ${../templates/ui-qml-backend} $out
+    chmod -R u+w $out
+    cp ${./fixtures/commented-ui.rep} $out/src/ui_example.rep
+  '';
   backend = (mkLogosQmlModule {
-    src = ../templates/ui-qml-backend;
+    src = commentedBackend;
     configFile = ../templates/ui-qml-backend/metadata.json;
   }).packages.${system};
   core = (mkLogosModule {
