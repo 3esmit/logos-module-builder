@@ -59,6 +59,7 @@
 
 let
   metadataJson = builtins.readFile configFile;
+  qtPlugin = common.requireQtPlugin logos-plugin-qt;
 
   # ── Two configs, and why ──────────────────────────────────────────────────
   #
@@ -374,7 +375,7 @@ let
       # logos-qt-sdk stays for what the host runtime never carried: the
       # Qt-typed logos_qt_lp_bridge.h / logos_qt_wire.h / logos_ui_plugin_context.h
       # and the logos-qt-generator that emits #includes of them.
-      logosQtHost = logos-plugin-qt.packages.${system}.logos-qt-host;
+      logosQtHost = qtPlugin.packages.${system}.logos-qt-host;
       # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
       # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
       logosQtGenerator = logos-qt-sdk.packages.${common.buildSystemFor system}.logos-qt-generator;
@@ -384,7 +385,7 @@ let
       # compile error — it silently emits STALE glue. That is how a
       # host-services grant went undelivered while every build stayed green.
       logosQtHostGenerator =
-        logos-plugin-qt.packages.${common.buildSystemFor system}.logos-qt-host-generator;
+        qtPlugin.packages.${common.buildSystemFor system}.logos-qt-host-generator;
       # The four LogosView*.in templates logos_module(REP_FILE ...) instantiates.
       # They live in logos-view-module (the ui_qml authoring flavour), NOT in
       # the plugin backend any more, and cmake/LogosModule.cmake here refuses to
@@ -1060,7 +1061,7 @@ let
       logosSdkBuild = logos-cpp-sdk.packages.${common.buildSystemFor system}.default;
       logosQtSdk = logos-qt-sdk.packages.${system}.default;
       # Same repoint in the dev shell: LOGOS_QT_HOST_ROOT below.
-      logosQtHost = logos-plugin-qt.packages.${system}.logos-qt-host;
+      logosQtHost = qtPlugin.packages.${system}.logos-qt-host;
       # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
       # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
       logosQtGenerator = logos-qt-sdk.packages.${common.buildSystemFor system}.logos-qt-generator;
@@ -1070,7 +1071,7 @@ let
       # compile error — it silently emits STALE glue. That is how a
       # host-services grant went undelivered while every build stayed green.
       logosQtHostGenerator =
-        logos-plugin-qt.packages.${common.buildSystemFor system}.logos-qt-host-generator;
+        qtPlugin.packages.${common.buildSystemFor system}.logos-qt-host-generator;
       # The four LogosView*.in templates logos_module(REP_FILE ...) instantiates.
       # They live in logos-view-module (the ui_qml authoring flavour), NOT in
       # the plugin backend any more, and cmake/LogosModule.cmake here refuses to

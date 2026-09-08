@@ -14,6 +14,7 @@ if(MODE STREQUAL "standard")
     endif()
     message(STATUS "STANDARD_OK=${CMAKE_CXX_STANDARD}")
 elseif(MODE STREQUAL "rep")
+    string(ASCII 239 187 191 UTF8_BOM)
     set(CASES
         "class Actual\n{\n}\n"
         "// class Legacy\nclass Actual\n{\n}\n"
@@ -25,6 +26,8 @@ elseif(MODE STREQUAL "rep")
         "/* class Legacy */ class Actual\n{\n}\n"
         "#include \"class Legacy\"\n  class Actual\n{\n}\n"
         "class Actual\n{\n}\nclass Second\n{\n}\n"
+        "${UTF8_BOM}class Actual\n{\n}\n"
+        "${UTF8_BOM}/* class Legacy */ class Actual\n{\n}\n"
     )
     foreach(CONTENTS IN LISTS CASES)
         file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/probe.rep" "${CONTENTS}")

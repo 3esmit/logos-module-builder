@@ -16,6 +16,7 @@
 { nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-protocol, logos-qt-sdk, logos-plugin-qt ? null, logos-view-module, logos-test-framework }:
 
 let
+  qtPlugin = common.requireQtPlugin logos-plugin-qt;
   modulePreConfigure = import ./modulePreConfigure.nix { inherit lib; };
   mkExternalLib = import ./mkExternalLib.nix { inherit lib common; };
 in
@@ -132,7 +133,7 @@ let
       # objects). logos-test-framework's LogosTest.cmake takes it from
       # LOGOS_QT_HOST_ROOT and from nowhere else; LOGOS_QT_SDK_ROOT is passed
       # alongside purely for the Qt-typed headers logos-qt-sdk alone ships.
-      logosQtHost = logos-plugin-qt.packages.${system}.logos-qt-host;
+      logosQtHost = qtPlugin.packages.${system}.logos-qt-host;
       # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
       # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
       logosQtGenerator = logos-qt-sdk.packages.${common.buildSystemFor system}.logos-qt-generator;
@@ -142,7 +143,7 @@ let
       # compile error — it silently emits STALE glue. That is how a
       # host-services grant went undelivered while every build stayed green.
       logosQtHostGenerator =
-        logos-plugin-qt.packages.${common.buildSystemFor system}.logos-qt-host-generator;
+        qtPlugin.packages.${common.buildSystemFor system}.logos-qt-host-generator;
       # The VIEW plugin glue generator (`--backend ui`), from logos-view-module.
       # Needed HERE too, not just in the plugin build: compose below runs
       # autoCodegen, which for a `type: ui_qml` module is the ui backend. Before

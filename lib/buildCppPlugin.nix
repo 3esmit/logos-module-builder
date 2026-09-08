@@ -18,6 +18,7 @@
 
 let
   metadataJson = builtins.readFile configFile;
+  qtPlugin = common.requireQtPlugin logos-plugin-qt;
 
   # `config` is parsed with NO platform: it answers only for the fields no
   # `platforms` overlay may vary (name / version / type / interface), which are
@@ -182,7 +183,7 @@ let
       # logos-qt-sdk stays for what the host runtime never carried: the
       # Qt-typed logos_qt_lp_bridge.h / logos_qt_wire.h / logos_ui_plugin_context.h
       # and the logos-qt-generator that emits #includes of them.
-      logosQtHost = logos-plugin-qt.packages.${system}.logos-qt-host;
+      logosQtHost = qtPlugin.packages.${system}.logos-qt-host;
       # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
       # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
       logosQtGenerator = logos-qt-sdk.packages.${common.buildSystemFor system}.logos-qt-generator;
@@ -192,7 +193,7 @@ let
       # compile error — it silently emits STALE glue. That is how a
       # host-services grant went undelivered while every build stayed green.
       logosQtHostGenerator =
-        logos-plugin-qt.packages.${common.buildSystemFor system}.logos-qt-host-generator;
+        qtPlugin.packages.${common.buildSystemFor system}.logos-qt-host-generator;
       # The four LogosView*.in templates logos_module(REP_FILE ...) instantiates
       # — and this is the ui_qml path, so effectively every consumer of them.
       # They live in logos-view-module now, not in the plugin backend, and
@@ -404,7 +405,7 @@ let
       # compile error — it silently emits STALE glue. That is how a
       # host-services grant went undelivered while every build stayed green.
       logosQtHostGenerator =
-        logos-plugin-qt.packages.${common.buildSystemFor system}.logos-qt-host-generator;
+        qtPlugin.packages.${common.buildSystemFor system}.logos-qt-host-generator;
       # The four LogosView*.in templates logos_module(REP_FILE ...) instantiates
       # — and this is the ui_qml path, so effectively every consumer of them.
       # They live in logos-view-module now, not in the plugin backend, and
