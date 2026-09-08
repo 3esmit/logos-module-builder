@@ -153,6 +153,11 @@
         ui-sdk-contract = import ./tests/test-ui-sdk-contract.nix {
           inherit pkgs system;
         };
+        rust-module-load = import ./tests/test-rust-module-load.nix {
+          inherit pkgs;
+          mkLogosModule = lib.mkLogosModule;
+          fixturesRoot = ./tests/fixtures;
+        };
         default = import ./tests {
           inherit pkgs;
           inherit (nixpkgs) lib;
@@ -166,6 +171,7 @@
             self.checks.${system}.qt-input-contract
             self.checks.${system}.doctest-source
             self.checks.${system}.template-helper-precedence
+            self.checks.${system}.rust-module-load
           ];
         };
         # Integration test: actually builds a QML module from a fixture
