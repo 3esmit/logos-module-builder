@@ -29,7 +29,22 @@
     # this flake — no standalone release required.
     logos-design-system.url = "github:logos-co/logos-design-system";
     logos-view-module-runtime.url = "github:3esmit/logos-view-module-runtime?rev=8aac03585bba147df1ea409af5ac177cf967713d";
+    # The view runtime, host shell and liblogos_core link the same C++ SDK
+    # types. Keep their SDK/protocol artifacts identical to module plugins.
+    logos-view-module-runtime.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
+    logos-view-module-runtime.inputs.logos-qt-sdk.follows = "logos-qt-sdk";
+    logos-view-module-runtime.inputs.logos-protocol.follows = "logos-protocol";
+    # Own the linked core explicitly: older Nix does not preserve deeper
+    # overrides through standalone's liblogos input. Keep its existing revision.
+    logos-liblogos.url = "github:logos-co/logos-liblogos/2f4162a97f3b6d8f469ac669cd0f198f604606ca";
+    logos-liblogos.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
+    logos-liblogos.inputs.logos-qt-sdk.follows = "logos-qt-sdk";
+    logos-liblogos.inputs.logos-protocol.follows = "logos-protocol";
     logos-standalone-app.url = "github:logos-co/logos-standalone-app";
+    logos-standalone-app.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
+    logos-standalone-app.inputs.logos-qt-sdk.follows = "logos-qt-sdk";
+    logos-standalone-app.inputs.logos-protocol.follows = "logos-protocol";
+    logos-standalone-app.inputs.logos-liblogos.follows = "logos-liblogos";
     logos-standalone-app.inputs.logos-design-system.follows = "logos-design-system";
     logos-standalone-app.inputs.logos-view-module-runtime.follows = "logos-view-module-runtime";
     # Test framework for module unit tests
@@ -48,7 +63,7 @@
     nixpkgs.follows = "logos-nix/nixpkgs";
   };
 
-  outputs = { self, nixpkgs, logos-nix, logos-cpp-sdk, logos-protocol, logos-qt-sdk, logos-module, logos-plugin-qt, logos-plugin-core, nix-bundle-logos-module-install, nix-bundle-lgx, logos-standalone-app, logos-test-framework, logos-rust-sdk, rust-overlay ? null, ... }:
+  outputs = inputs@{ self, nixpkgs, logos-nix, logos-cpp-sdk, logos-protocol, logos-qt-sdk, logos-module, logos-plugin-qt, logos-plugin-core, nix-bundle-logos-module-install, nix-bundle-lgx, logos-standalone-app, logos-test-framework, logos-rust-sdk, rust-overlay ? null, ... }:
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
 
@@ -112,10 +127,20 @@
 
       # Tests — pure Nix evaluation tests (no compilation)
       checks = forAllSystems ({ pkgs, system, ... }: {
+        ui-sdk-inputs = import ./tests/test-ui-sdk-inputs.nix {
+          inherit pkgs system inputs;
+        };
+        ui-sdk-contract = import ./tests/test-ui-sdk-contract.nix {
+          inherit pkgs system;
+        };
         default = import ./tests {
           inherit pkgs;
           inherit (nixpkgs) lib;
           inherit (lib) parseMetadata common mkExternalLib;
+          validationChecks = [
+            self.checks.${system}.ui-sdk-inputs
+            self.checks.${system}.ui-sdk-contract
+          ];
         };
         # Integration test: actually builds a QML module from a fixture
         qml-integration = import ./tests/test-qml-integration.nix {
