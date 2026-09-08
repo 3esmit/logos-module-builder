@@ -6,8 +6,8 @@ Complete reference for `LogosModule.cmake` functions and options.
 
 `LogosModule.cmake` is a CMake module that handles all the boilerplate for building Logos plugins. It provides:
 
-- Automatic SDK and liblogos detection
-- Qt6/Qt5 finding and configuration
+- Automatic SDK, module interface, protocol, and Qt host runtime detection
+- Qt 6.8 or newer finding and configuration
 - Code generation setup
 - External library handling
 - Platform-specific RPATH configuration
@@ -199,28 +199,40 @@ This will:
 
 ### logos_find_dependencies()
 
-Find and configure Logos SDK and liblogos.
+Find the module interface, SDKs, protocol, and Qt host runtime in source or installed layouts.
 
 ```cmake
 logos_find_dependencies()
 ```
 
 Sets variables:
-- `LOGOS_LIBLOGOS_ROOT` - Path to logos-liblogos
+
+- `LOGOS_MODULE_ROOT` - Path to logos-module
 - `LOGOS_CPP_SDK_ROOT` - Path to logos-cpp-sdk
-- `LOGOS_LIBLOGOS_IS_SOURCE` - TRUE if source layout
+- `LOGOS_QT_SDK_ROOT` - Path to the Qt-typed consumer headers
+- `LOGOS_QT_HOST_ROOT` - Path to logos-plugin-qt sources or an installed logos-qt-host prefix
+- `LOGOS_PROTOCOL_ROOT` - Path to logos-protocol
+- `LOGOS_MODULE_IS_SOURCE` - TRUE if source layout
 - `LOGOS_CPP_SDK_IS_SOURCE` - TRUE if source layout
+- `LOGOS_QT_HOST_IS_SOURCE` - TRUE if the host runtime uses source layout
+- `LOGOS_QT_HOST_TARGET` - `logos-qt-host::logos_qt_host`
+
+A missing or invalid host runtime is a configuration error. `LOGOS_QT_SDK_ROOT`
+is not a substitute: the SDK no longer owns the host runtime headers.
 
 ### logos_find_qt()
 
-Find Qt6 (or Qt5 fallback) with required components.
+Find Qt 6.8 or newer with Core and RemoteObjects, then apply standard Qt project
+setup. Qt 5 is no longer supported. The helper preserves a caller-supplied C++
+standard; otherwise it selects C++17.
 
 ```cmake
 logos_find_qt()
 ```
 
 Sets:
-- `QT_VERSION_MAJOR` - 5 or 6
+
+- `QT_VERSION_MAJOR` - 6
 
 ## Environment Variables
 
@@ -238,12 +250,25 @@ Override path to logos-cpp-sdk.
 export LOGOS_CPP_SDK_ROOT=/path/to/logos-cpp-sdk
 ```
 
-### LOGOS_LIBLOGOS_ROOT
-Override path to logos-liblogos.
+### LOGOS_MODULE_ROOT
+Override path to the logos-module interface headers.
 
 ```bash
-export LOGOS_LIBLOGOS_ROOT=/path/to/logos-liblogos
+export LOGOS_MODULE_ROOT=/path/to/logos-module
 ```
+
+### LOGOS_QT_SDK_ROOT, LOGOS_QT_HOST_ROOT, and LOGOS_PROTOCOL_ROOT
+
+These select the Qt consumer headers, Qt host runtime, and protocol library,
+respectively. Nix builds and module development shells provide them automatically.
+For a manual build, point each variable at its corresponding source checkout or
+installed prefix. Keep the host runtime and SDK on the same protocol revision.
+
+### LOGOS_VIEW_TEMPLATE_DIR
+
+Directory containing the four `LogosView*.in` templates from logos-view-module.
+Required for `logos_module(REP_FILE ...)`; Nix builds and module development
+shells provide it automatically. There is no module-local template fallback.
 
 ## Generated Targets
 
