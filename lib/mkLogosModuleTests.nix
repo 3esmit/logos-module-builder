@@ -16,6 +16,7 @@
 { nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-protocol, logos-qt-sdk, logos-plugin-qt ? null, logos-test-framework }:
 
 let
+  qtPlugin = common.requireQtPlugin logos-plugin-qt;
   modulePreConfigure = import ./modulePreConfigure.nix { inherit lib; };
 in
 
@@ -80,14 +81,14 @@ let
       # objects). logos-test-framework's LogosTest.cmake takes it from
       # LOGOS_QT_HOST_ROOT and from nowhere else; LOGOS_QT_SDK_ROOT is passed
       # alongside purely for the Qt-typed headers logos-qt-sdk alone ships.
-      logosQtHost = logos-plugin-qt.packages.${system}.logos-qt-host;
+      logosQtHost = qtPlugin.packages.${system}.logos-qt-host;
       # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
       # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
       logosQtGenerator = logos-qt-sdk.packages.${common.buildSystemFor system}.logos-qt-generator;
       # Provider glue is a build-platform tool owned by logos-plugin-qt;
       # logos-qt-generator no longer accepts --backend cdylib.
       logosQtHostGenerator =
-        logos-plugin-qt.packages.${common.buildSystemFor system}.logos-qt-host-generator;
+        qtPlugin.packages.${common.buildSystemFor system}.logos-qt-host-generator;
       logosProtocolPkg = logos-protocol.packages.${system}.default;
       testFramework = logos-test-framework.packages.${system}.default;
 

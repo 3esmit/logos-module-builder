@@ -17,6 +17,8 @@
 }:
 
 let
+  qtPlugin = common.requireQtPlugin logos-plugin-qt;
+
   # Parse the module configuration
   rawConfig = parseMetadata.parseModuleConfig (builtins.readFile configFile);
   config = common.recursiveMerge [ rawConfig configOverrides ];
@@ -176,14 +178,14 @@ let
       # logos-qt-sdk stays for what the host runtime never carried: the
       # Qt-typed logos_qt_lp_bridge.h / logos_qt_wire.h / logos_ui_plugin_context.h
       # and the logos-qt-generator that emits #includes of them.
-      logosQtHost = logos-plugin-qt.packages.${system}.logos-qt-host;
+      logosQtHost = qtPlugin.packages.${system}.logos-qt-host;
       # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
       # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
       logosQtGenerator = logos-qt-sdk.packages.${common.buildSystemFor system}.logos-qt-generator;
       # Provider glue is a build-platform tool owned by logos-plugin-qt;
       # logos-qt-generator no longer accepts --backend cdylib.
       logosQtHostGenerator =
-        logos-plugin-qt.packages.${common.buildSystemFor system}.logos-qt-host-generator;
+        qtPlugin.packages.${common.buildSystemFor system}.logos-qt-host-generator;
       # The four LogosView*.in templates logos_module(REP_FILE ...) instantiates
       # — and this is the ui_qml path, so effectively every consumer of them.
       # They live in logos-view-module now, not in the plugin backend, and
@@ -356,14 +358,14 @@ let
       # no-op off the Windows target.
       logosSdkBuild = logos-cpp-sdk.packages.${common.buildSystemFor system}.default;
       logosQtSdk = logos-qt-sdk.packages.${system}.default;
-      logosQtHost = logos-plugin-qt.packages.${system}.logos-qt-host;
+      logosQtHost = qtPlugin.packages.${system}.logos-qt-host;
       # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
       # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
       logosQtGenerator = logos-qt-sdk.packages.${common.buildSystemFor system}.logos-qt-generator;
       # Provider glue is a build-platform tool owned by logos-plugin-qt;
       # logos-qt-generator no longer accepts --backend cdylib.
       logosQtHostGenerator =
-        logos-plugin-qt.packages.${common.buildSystemFor system}.logos-qt-host-generator;
+        qtPlugin.packages.${common.buildSystemFor system}.logos-qt-host-generator;
       # The four LogosView*.in templates logos_module(REP_FILE ...) instantiates
       # — and this is the ui_qml path, so effectively every consumer of them.
       # They live in logos-view-module now, not in the plugin backend, and

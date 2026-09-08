@@ -880,6 +880,9 @@ endfunction()
 # Match a declaration, never a class name mentioned in migration comments.
 function(_logos_parse_rep_class REP_FILE OUT_VAR)
     file(READ "${REP_FILE}" _REP_CONTENTS)
+    # file(READ) retains the UTF-8 BOM, unlike the SDK's QString decoder.
+    string(ASCII 239 187 191 _UTF8_BOM)
+    string(REGEX REPLACE "^${_UTF8_BOM}" "" _REP_CONTENTS "${_REP_CONTENTS}")
     # Strip both styles in one pass so delimiters inside a comment stay inert.
     string(REGEX REPLACE "//[^\r\n]*|/\\*([^*]|\\*+[^*/])*\\*+/" " " _REP_CONTENTS "${_REP_CONTENTS}")
     string(REGEX MATCH "(^|[\r\n])[ \t]*class[ \t]+([A-Za-z_][A-Za-z0-9_]*)" _ "${_REP_CONTENTS}")
