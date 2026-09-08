@@ -1,7 +1,7 @@
 # Test runner for logos-module-builder
-# All tests are pure Nix evaluation — no compilation needed.
+# Unit assertions are pure Nix evaluation; validationChecks adds boundary probes.
 # Usage: nix build .#checks.<system>.default
-{ pkgs, lib, parseMetadata, common, mkExternalLib, fixturesRoot ? ./fixtures }:
+{ pkgs, lib, parseMetadata, common, mkExternalLib, fixturesRoot ? ./fixtures, validationChecks ? [] }:
 
 let
   # Helper: assert with message. Throws on failure.
@@ -31,9 +31,10 @@ let
   templateTests = import ./test-templates.nix { inherit assertEq assertBool assertHasAttr parseMetadata; builderRoot = ./..; };
   collectDepsTests = import ./test-collectAllModuleDeps.nix { inherit assertEq assertBool assertHasAttr common; };
   fixtureTests = import ./test-fixtures.nix { inherit assertEq assertBool assertHasAttr parseMetadata fixturesRoot; };
+  hostCodegenTests = import ./test-host-codegen.nix { inherit lib assertBool parseMetadata; };
 
   # Collect all test results into a list of bools (all must be true)
-  allTests = parseMetadataTests ++ commonTests ++ externalLibTests ++ templateTests ++ collectDepsTests ++ fixtureTests;
+  allTests = parseMetadataTests ++ commonTests ++ externalLibTests ++ templateTests ++ collectDepsTests ++ fixtureTests ++ hostCodegenTests;
 
   # Force evaluation of all tests
   allPassed = builtins.deepSeq allTests (builtins.length allTests);
@@ -42,5 +43,6 @@ in pkgs.runCommand "logos-module-builder-tests" {} ''
   echo "Running logos-module-builder tests..."
   echo "All ${builtins.toString allPassed} tests passed."
   mkdir -p $out
+  ${lib.concatMapStringsSep "\n" (check: "test -f ${check}/results.txt") validationChecks}
   echo "${builtins.toString allPassed} tests passed" > $out/results.txt
 ''

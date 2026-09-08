@@ -1,0 +1,9 @@
+// Previous API: class LegacyName
+/* Migration notes:
+class BlockCommentName
+*/
+class UiExample
+{
+    SLOT(int add(int a, int b))
+    PROP(QString status="Ready" READONLY)
+}

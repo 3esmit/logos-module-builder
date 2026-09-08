@@ -72,38 +72,23 @@ jobs:
           name: logos-co
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
 
-      # Resolve the commit under test. For pull requests this is the PR's head
-      # commit (not the synthetic merge commit); for pushes it's the pushed
-      # commit. Passed to --release-for below so each doc-test builds its module
-      # against THIS commit of logos-module-builder instead of the latest release.
-      #
-      # Fork PRs are the exception: their head commit lives in the fork, not in
-      # logos-co/logos-module-builder, so nix could not fetch
-      # `github:logos-co/logos-module-builder/<sha>`. We blank the SHA for forks
-      # (--release-for repo= → pins that repo to latest), so the doc-test still
-      # runs for fork PRs, just against master.
-      - name: Resolve commit under test
-        id: commit
-        shell: bash
+      # Bind BOTH repository and revision, including direct #rust-sdk-src
+      # installables. --release-for changes only a revision, and workspace
+      # pins override dependencies, not the top-level installable. Keep the
+      # checked-in tutorials unchanged by running CI-only staged spec copies.
+      - name: Prepare exact-source doc-tests
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ] && \
-             [ "${{ github.event.pull_request.head.repo.fork }}" = "true" ]; then
-            echo "sha=" >> "$GITHUB_OUTPUT"
-            echo "Fork PR detected — doc-test will run against latest master."
-          else
-            echo "sha=${{ github.event.pull_request.head.sha || github.sha }}" >> "$GITHUB_OUTPUT"
-          fi
+          python3 -m unittest discover -s tests -p 'test_prepare_doctests.py'
+          python3 scripts/prepare-doctests.py --output-root "$RUNNER_TEMP/builder-doctests"
 
       # The runner is the shared `doctest` CLI, invoked directly via its flake
-      # (github:logos-co/logos-doctest). --release-for pins the {release}
-      # placeholder for logos-module-builder to the commit under test, so every
-      # `github:logos-co/logos-module-builder{release}` URL in the specs becomes
-      # `.../<sha>` and each module is built against this PR/push.
+      # (github:logos-co/logos-doctest), over the exact-source copies above.
       # All specs in ONE invocation: each runs in its own fresh temp workdir and
       # they land in one combined report. The workspace tests-and-doctests
       # pipeline parses this block to discover the spec list — keep every spec
       # here.
       - name: Run doc-tests
+        working-directory: ${{ runner.temp }}/builder-doctests
         run: |
           # --continue-on-fail so the run walks every step and the published
           # report is complete. The job still fails (non-zero exit) if any step
@@ -119,7 +104,6 @@ jobs:
             doctests/wrap-external-lib-4-nix-flake.test.yaml \
             --verbose \
             --continue-on-fail \
-            --release-for logos-module-builder=${{ steps.commit.outputs.sha }} \
             --report "${{ runner.temp }}/builder-doctest-report.html"
 
       - name: Stage report for upload
@@ -127,6 +111,9 @@ jobs:
         shell: bash
         run: |
           mkdir -p report-out
+          if [ -f "$RUNNER_TEMP/builder-doctests/source.json" ]; then
+            cp "$RUNNER_TEMP/builder-doctests/source.json" report-out/source.json
+          fi
           # Name it index.html so the published directory URL renders directly.
           if [ -f "${{ runner.temp }}/builder-doctest-report.html" ]; then
             cp "${{ runner.temp }}/builder-doctest-report.html" report-out/index.html
@@ -139,18 +126,18 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: builder-doctest-report-${{ matrix.os }}
-          path: report-out/index.html
+          path: report-out/
           if-no-files-found: warn
 
       - name: Verify markdown generation
+        working-directory: ${{ runner.temp }}/builder-doctests
         run: |
           for spec in cross-language-composition cross-language-composition-reverse \
-                      ui-typed-backend \
+                      ui-typed-backend cdylib-qt-free-outbound \
                       wrap-external-lib-1-source wrap-external-lib-2-prebuilt-binaries \
                       wrap-external-lib-3-external-source wrap-external-lib-4-nix-flake; do
             nix run github:logos-co/logos-doctest -- generate \
               "doctests/$spec.test.yaml" \
-              --release-for logos-module-builder=${{ steps.commit.outputs.sha }} \
               -o "/tmp/$spec.md"
             test -s "/tmp/$spec.md"
           done
