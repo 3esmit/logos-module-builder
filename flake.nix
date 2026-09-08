@@ -123,6 +123,7 @@
           inherit pkgs;
           inherit (nixpkgs) lib;
           inherit (lib) parseMetadata common mkExternalLib;
+          validationChecks = [ self.checks.${system}.design-system-input ];
         };
         # Integration test: actually builds a QML module from a fixture
         qml-integration = import ./tests/test-qml-integration.nix {
