@@ -1,7 +1,7 @@
 # Integration tests for mkLogosQmlModule
 # These tests actually BUILD a QML module from a fixture directory
 # and verify the output derivation contents.
-{ pkgs, mkLogosQmlModule, fixturesRoot }:
+{ pkgs, mkLogosQmlModule, mkLogosModule, fixturesRoot }:
 
 let
   # Build the fixture QML module
@@ -14,12 +14,32 @@ let
 
   # QML-only default uses lib/ layout (Main.qml + metadata.json under lib/).
   defaultPkg = qmlResult.packages.${system}.default;
+  backend = (mkLogosQmlModule {
+    src = ../templates/ui-qml-backend;
+    configFile = ../templates/ui-qml-backend/metadata.json;
+  }).packages.${system};
+  core = (mkLogosModule {
+    src = ../templates/minimal-module;
+    configFile = ../templates/minimal-module/metadata.json;
+  }).packages.${system};
+  extension = if pkgs.stdenv.isDarwin then "dylib" else "so";
 
 in pkgs.runCommand "qml-integration-tests" {
   nativeBuildInputs = [ pkgs.jq ];
 } ''
   set -euo pipefail
   echo "=== QML Integration Tests ==="
+
+  # Build both CMake entry paths, generated-source outputs, and packages. This
+  # catches a generator on PATH that emits glue the selected runtime cannot link.
+  test -f ${core.lib}/lib/minimal_plugin.${extension}
+  test -f ${core.generate}/generated_code/minimal_cdylib_glue.cpp
+  test -f ${backend.lib}/lib/ui_example_plugin.${extension}
+  test -f ${backend.lib}/lib/ui_example_replica_factory.${extension}
+  test -f ${backend.generate}/generated_code/ui_example_ui_glue.cpp
+  test -n "$(find ${core.lgx} -name '*.lgx' -print -quit)"
+  test -n "$(find ${backend.lgx} -name '*.lgx' -print -quit)"
+  echo "PASS: core and QML backend compile, generate, and package"
 
   # Test 1: default package exists and is a directory
   test -d ${defaultPkg}

@@ -8,19 +8,24 @@
     rust-overlay.url = "github:oxalica/rust-overlay";
     rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
     # SDK and module deps — owned by this builder, injected into backends
-    logos-cpp-sdk.url = "github:3esmit/logos-cpp-sdk?rev=790030b442f3fc210f973fb2b8807e3495ee9724";
+    logos-cpp-sdk.url = "github:3esmit/logos-cpp-sdk?rev=cbcc4f73e13ccc022942323f729dc7b32d4c2839";
     logos-cpp-sdk.inputs.logos-protocol.follows = "logos-protocol";
     # Protocol layer (transports + lp_* C ABI + the protocol semver every
     # module gets stamped with) and the Qt developer layer modules link.
-    logos-protocol.url = "github:3esmit/logos-protocol?rev=dbd1df94caeb3e073c330fc3d95988ce1086b1a5";
-    logos-qt-sdk.url = "github:3esmit/logos-qt-sdk?rev=49cc49450de1db0168b687b52422beeefd55761c";
+    logos-protocol.url = "github:3esmit/logos-protocol?rev=f090940772eb74f6cfac0febdecd521f05a264c7";
+    logos-qt-sdk.url = "github:3esmit/logos-qt-sdk?rev=683dccbea1e1caf0a5bbf0dfebc8d8438b71a073";
     logos-qt-sdk.inputs.logos-protocol.follows = "logos-protocol";
     logos-qt-sdk.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
+    logos-qt-sdk.inputs.logos-plugin-qt.follows = "logos-plugin-qt";
     logos-module.url = "github:logos-co/logos-module";
     # UI modules (type: ui, ui_qml) always use Qt
-    logos-plugin-qt.url = "github:logos-co/logos-plugin-qt";
+    logos-plugin-qt.url = "github:logos-co/logos-plugin-qt/9b2c64e5a480245b5333e20183a4a3c572d543cc";
+    logos-plugin-qt.inputs.logos-protocol.follows = "logos-protocol";
+    logos-plugin-qt.inputs.logos-nix.follows = "logos-nix";
     # Core modules (type: core) use this backend — defaults to Qt, swappable later
-    logos-plugin-core.url = "github:logos-co/logos-plugin-qt";
+    logos-plugin-core.follows = "logos-plugin-qt";
+    logos-view-module.url = "github:logos-co/logos-view-module/1f95a75f836a7601bde3b488dc2e773c4ebb9068";
+    logos-view-module.inputs.logos-nix.follows = "logos-nix";
     nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
     nix-bundle-logos-module-install.url = "github:logos-co/nix-bundle-logos-module-install";
     # Host shell used by `nix run` / integration tests for ui_qml modules.
@@ -33,8 +38,12 @@
     logos-standalone-app.inputs.logos-design-system.follows = "logos-design-system";
     logos-standalone-app.inputs.logos-view-module-runtime.follows = "logos-view-module-runtime";
     # Test framework for module unit tests
-    logos-test-framework.url = "github:logos-co/logos-test-framework";
+    # Host-runtime split, before CallCaller requires the next SDK API revision.
+    logos-test-framework.url = "github:logos-co/logos-test-framework/5f75c9418b7c842f1750bfde31accf3d0cba283d";
     logos-test-framework.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
+    logos-test-framework.inputs.logos-qt-sdk.follows = "logos-qt-sdk";
+    logos-test-framework.inputs.logos-plugin-qt.follows = "logos-plugin-qt";
+    logos-test-framework.inputs.logos-protocol.follows = "logos-protocol";
     # The Rust SDK provides logos-lidl-gen (the generator the builder runs for
     # codegen.rust modules) and the SDK source the crate links. logos-rust-sdk
     # depends BACK on this builder for its own integration tests, so its
@@ -48,7 +57,7 @@
     nixpkgs.follows = "logos-nix/nixpkgs";
   };
 
-  outputs = { self, nixpkgs, logos-nix, logos-cpp-sdk, logos-protocol, logos-qt-sdk, logos-module, logos-plugin-qt, logos-plugin-core, nix-bundle-logos-module-install, nix-bundle-lgx, logos-standalone-app, logos-test-framework, logos-rust-sdk, rust-overlay ? null, ... }:
+  outputs = { self, nixpkgs, logos-nix, logos-cpp-sdk, logos-protocol, logos-qt-sdk, logos-module, logos-plugin-qt, logos-plugin-core, logos-view-module, nix-bundle-logos-module-install, nix-bundle-lgx, logos-standalone-app, logos-test-framework, logos-rust-sdk, rust-overlay ? null, ... }:
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
 
@@ -63,6 +72,7 @@
         inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install logos-standalone-app;
         inherit logos-nix;
         inherit logos-cpp-sdk logos-protocol logos-qt-sdk logos-module logos-test-framework logos-rust-sdk;
+        inherit logos-plugin-qt logos-view-module;
         inherit rust-overlay;
         inherit (nixpkgs) lib;
         uiBackend = logos-plugin-qt.rawLib or logos-plugin-qt.lib;
@@ -116,11 +126,16 @@
           inherit pkgs;
           inherit (nixpkgs) lib;
           inherit (lib) parseMetadata common mkExternalLib;
+          validationChecks = [
+            self.checks.${system}.qt-host-repoint
+            self.checks.${system}.host-codegen-wiring
+          ];
         };
         # Integration test: actually builds a QML module from a fixture
         qml-integration = import ./tests/test-qml-integration.nix {
           inherit pkgs;
           mkLogosQmlModule = lib.mkLogosQmlModule;
+          mkLogosModule = lib.mkLogosModule;
           fixturesRoot = ./tests/fixtures;
         };
         # Integration test: builds and runs unit tests via logos-test-framework
@@ -133,6 +148,13 @@
         # Integration test: verifies static library (.a) support in EXTERNAL_LIBS
         static-extlib = import ./tests/test-static-extlib.nix {
           inherit pkgs;
+        };
+        qt-host-repoint = import ./tests/test-qt-host-repoint.nix {
+          inherit pkgs;
+        };
+        host-codegen-wiring = import ./tests/test-host-codegen-wiring.nix {
+          inherit pkgs logos-plugin-qt;
+          inherit (lib) common mkLogosModule mkLogosQmlModule;
         };
         # Integration test: a Rust cdylib module with an external system build dep
         # declared via the `nix.rust` block — proves pkg-config/openssl-style deps
