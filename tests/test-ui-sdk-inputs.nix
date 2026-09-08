@@ -23,5 +23,5 @@ let
   ) (builtins.attrNames consumers));
 in builtins.deepSeq checks (pkgs.runCommand "ui-sdk-input-tests" {} ''
   mkdir -p $out
-  echo "9 shared SDK/protocol contracts passed" > $out/results.txt
+  echo "${toString (builtins.length checks)} shared SDK/protocol contracts passed" > $out/results.txt
 '')

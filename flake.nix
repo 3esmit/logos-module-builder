@@ -34,13 +34,17 @@
     logos-view-module-runtime.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
     logos-view-module-runtime.inputs.logos-qt-sdk.follows = "logos-qt-sdk";
     logos-view-module-runtime.inputs.logos-protocol.follows = "logos-protocol";
+    # Own the linked core explicitly: older Nix does not preserve deeper
+    # overrides through standalone's liblogos input. Keep its existing revision.
+    logos-liblogos.url = "github:logos-co/logos-liblogos/2f4162a97f3b6d8f469ac669cd0f198f604606ca";
+    logos-liblogos.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
+    logos-liblogos.inputs.logos-qt-sdk.follows = "logos-qt-sdk";
+    logos-liblogos.inputs.logos-protocol.follows = "logos-protocol";
     logos-standalone-app.url = "github:logos-co/logos-standalone-app";
     logos-standalone-app.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
     logos-standalone-app.inputs.logos-qt-sdk.follows = "logos-qt-sdk";
     logos-standalone-app.inputs.logos-protocol.follows = "logos-protocol";
-    logos-standalone-app.inputs.logos-liblogos.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
-    logos-standalone-app.inputs.logos-liblogos.inputs.logos-qt-sdk.follows = "logos-qt-sdk";
-    logos-standalone-app.inputs.logos-liblogos.inputs.logos-protocol.follows = "logos-protocol";
+    logos-standalone-app.inputs.logos-liblogos.follows = "logos-liblogos";
     logos-standalone-app.inputs.logos-design-system.follows = "logos-design-system";
     logos-standalone-app.inputs.logos-view-module-runtime.follows = "logos-view-module-runtime";
     # Test framework for module unit tests

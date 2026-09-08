@@ -31,8 +31,8 @@ let
   ) paths);
 in
 if !(accepts inputs) || !(builtins.all (value: value) rejected) then
-  throw "ui-sdk-contract (${system}): positive or one of 18 negative fixtures failed"
+  throw "ui-sdk-contract (${system}): positive or one of ${toString (builtins.length rejected)} negative fixtures failed"
 else pkgs.runCommand "ui-sdk-contract-tests" {} ''
   mkdir -p $out
-  echo "19 SDK contract fixtures passed" > $out/results.txt
+  echo "${toString (1 + builtins.length rejected)} SDK contract fixtures passed" > $out/results.txt
 ''
