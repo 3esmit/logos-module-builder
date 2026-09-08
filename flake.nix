@@ -130,6 +130,7 @@
             self.checks.${system}.qt-host-repoint
             self.checks.${system}.host-codegen-wiring
             self.checks.${system}.qt-input-contract
+            self.checks.${system}.doctest-source
           ];
         };
         # Integration test: actually builds a QML module from a fixture
@@ -160,6 +161,14 @@
         qt-input-contract = import ./tests/test-qt-input-contract.nix {
           inherit pkgs inputs;
         };
+        doctest-source = pkgs.runCommand "doctest-source-tests" {
+          nativeBuildInputs = [ pkgs.python3 ];
+        } ''
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 -m unittest discover -s ${./.}/tests -p 'test_prepare_doctests.py'
+          mkdir -p $out
+          echo passed > $out/results.txt
+        '';
         # Integration test: a Rust cdylib module with an external system build dep
         # declared via the `nix.rust` block — proves pkg-config/openssl-style deps
         # reach the crate's buildRustPackage compile.
