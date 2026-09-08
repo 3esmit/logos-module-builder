@@ -1042,6 +1042,8 @@ let
 
 in {
   packages = finalPackages;
+  # Composed modules need the dependency graph normally supplied by flake inputs.
+  moduleInputs = flakeInputs;
   inherit devShells config;
   metadataJson = builtins.readFile configFile;
 } // optionalApps // optionalTests

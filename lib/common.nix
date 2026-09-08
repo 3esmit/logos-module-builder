@@ -64,7 +64,7 @@ let
         let
           input = depInputs.${name};
           tdeps = (input.config or {}).dependencies or [];
-          tinputs = input.inputs or {};
+          tinputs = input.moduleInputs or (input.inputs or {});
         in
           if tdeps == [] then acc
           else acc // (collectAllModuleDeps system tinputs tdeps)
