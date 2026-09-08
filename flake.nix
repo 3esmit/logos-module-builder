@@ -115,7 +115,7 @@
         default = import ./tests {
           inherit pkgs;
           inherit (nixpkgs) lib;
-          inherit (lib) parseMetadata common mkExternalLib;
+          inherit (lib) parseMetadata common mkExternalLib mkLogosModule mkLogosQmlModule;
         };
         # Integration test: actually builds a QML module from a fixture
         qml-integration = import ./tests/test-qml-integration.nix {
