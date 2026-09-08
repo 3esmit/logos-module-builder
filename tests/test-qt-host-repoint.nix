@@ -166,6 +166,37 @@ in pkgs.runCommand "qt-host-repoint-tests" {
   grep -q 'The Qt host runtime is not optional' ${logosModuleCmake}
   echo "PASS: a package that defines no target is a FATAL_ERROR"
 
+  # Boundary checks use the real CMake helpers. No Qt lookup should happen for
+  # a caller-supplied standard below Qt's minimum; valid choices are preserved.
+  contracts=${./test-cmake-contracts.cmake}
+  cmake -DBUILDER_ROOT=${../.} -DMODE=rep -P "$contracts" > rep.log 2>&1
+  grep -q REP_CASES_OK rep.log
+  if cmake -DBUILDER_ROOT=${../.} -DMODE=rep-missing -P "$contracts" > missing.log 2>&1; then
+    echo "FAIL: comments alone supplied a replica class"
+    exit 1
+  fi
+  flatten missing.log | grep -q 'could not parse class name'
+  cmake -DBUILDER_ROOT=${../.} -DMODE=standard -DEXPECTED_STANDARD=17 -P "$contracts" > standard.log 2>&1
+  grep -q STANDARD_OK=17 standard.log
+  for standard in 17 20 23; do
+    cmake -DBUILDER_ROOT=${../.} -DMODE=standard -DCMAKE_CXX_STANDARD="$standard" \
+      -DEXPECTED_STANDARD="$standard" -P "$contracts" > standard.log 2>&1
+    grep -q "STANDARD_OK=$standard" standard.log
+  done
+  for standard in 98 11 14; do
+    if cmake -DBUILDER_ROOT=${../.} -DMODE=standard -DCMAKE_CXX_STANDARD="$standard" \
+      -DEXPECTED_STANDARD="$standard" -P "$contracts" > standard.log 2>&1; then
+      echo "FAIL: C++$standard accepted"
+      exit 1
+    fi
+    flatten standard.log | grep -q 'CMAKE_CXX_STANDARD >= 17'
+    if grep -q REACHED_QT_DISCOVERY standard.log; then
+      echo "FAIL: old standard reached Qt discovery"
+      exit 1
+    fi
+  done
+  echo "PASS: comment-aware replica class parsing and C++ standard contracts"
+
   echo ""
   echo "All Qt host runtime repoint tests passed."
   mkdir -p $out

@@ -13,7 +13,7 @@
     # Protocol layer (transports + lp_* C ABI + the protocol semver every
     # module gets stamped with) and the Qt developer layer modules link.
     logos-protocol.url = "github:3esmit/logos-protocol?rev=f090940772eb74f6cfac0febdecd521f05a264c7";
-    logos-qt-sdk.url = "github:3esmit/logos-qt-sdk?rev=683dccbea1e1caf0a5bbf0dfebc8d8438b71a073";
+    logos-qt-sdk.url = "github:3esmit/logos-qt-sdk?rev=17ea23fbbff01be365c60a57062f7fef294909bb";
     logos-qt-sdk.inputs.logos-protocol.follows = "logos-protocol";
     logos-qt-sdk.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
     logos-qt-sdk.inputs.logos-plugin-qt.follows = "logos-plugin-qt";
