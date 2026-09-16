@@ -4674,13 +4674,19 @@
         "default-module-loader": "default-module-loader_2",
         "logos-capability-module": "logos-capability-module_16",
         "logos-container": "logos-container_14",
-        "logos-cpp-sdk": "logos-cpp-sdk_59",
+        "logos-cpp-sdk": [
+          "logos-cpp-sdk"
+        ],
         "logos-module": "logos-module_78",
         "logos-module-loader": "logos-module-loader_6",
         "logos-nix": "logos-nix_611",
         "logos-package-manager": "logos-package-manager_29",
-        "logos-protocol": "logos-protocol_21",
-        "logos-qt-sdk": "logos-qt-sdk_16",
+        "logos-protocol": [
+          "logos-protocol"
+        ],
+        "logos-qt-sdk": [
+          "logos-qt-sdk"
+        ],
         "nixpkgs": [
           "logos-standalone-app",
           "logos-liblogos",
@@ -27552,15 +27558,21 @@
     "logos-standalone-app": {
       "inputs": {
         "logos-capability-module": "logos-capability-module",
-        "logos-cpp-sdk": "logos-cpp-sdk_30",
+        "logos-cpp-sdk": [
+          "logos-cpp-sdk"
+        ],
         "logos-design-system": [
           "logos-design-system"
         ],
         "logos-liblogos": "logos-liblogos_8",
         "logos-nix": "logos-nix_620",
-        "logos-protocol": "logos-protocol_22",
+        "logos-protocol": [
+          "logos-protocol"
+        ],
         "logos-qt-mcp": "logos-qt-mcp_15",
-        "logos-qt-sdk": "logos-qt-sdk_17",
+        "logos-qt-sdk": [
+          "logos-qt-sdk"
+        ],
         "logos-view-module-runtime": [
           "logos-view-module-runtime"
         ],
@@ -29054,10 +29066,16 @@
     },
     "logos-view-module-runtime_15": {
       "inputs": {
-        "logos-cpp-sdk": "logos-cpp-sdk_60",
+        "logos-cpp-sdk": [
+          "logos-cpp-sdk"
+        ],
         "logos-nix": "logos-nix_626",
-        "logos-protocol": "logos-protocol_24",
-        "logos-qt-sdk": "logos-qt-sdk_18",
+        "logos-protocol": [
+          "logos-protocol"
+        ],
+        "logos-qt-sdk": [
+          "logos-qt-sdk"
+        ],
         "nixpkgs": [
           "logos-view-module-runtime",
           "logos-nix",
