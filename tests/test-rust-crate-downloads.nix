@@ -22,7 +22,7 @@ let
   '';
   # Fetch probes retain every non-URL attribute and leave other registries alone.
   route = import ../lib/importCargoLock.nix {
-    pkgs = pkgs // { fetchurl = args: args; };
+    pkgs = pkgs // { buildPackages = { fetchurl = args: args; }; };
     rustPlatform.importCargoLock.override = args: args.fetchurl;
   };
   fetchArgs = { name = "crate-syn-3.0.5.tar.gz"; sha256 = checksum; };
