@@ -37,7 +37,18 @@
     # same logos-nix revision as this builder.
     logos-design-system.inputs.logos-nix.follows = "logos-nix";
     logos-view-module-runtime.url = "github:3esmit/logos-view-module-runtime?rev=8aac03585bba147df1ea409af5ac177cf967713d";
+    # The view runtime, host shell and liblogos_core link the same C++ SDK
+    # types. Keep their SDK/protocol artifacts identical to module plugins.
+    logos-view-module-runtime.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
+    logos-view-module-runtime.inputs.logos-qt-sdk.follows = "logos-qt-sdk";
+    logos-view-module-runtime.inputs.logos-protocol.follows = "logos-protocol";
     logos-standalone-app.url = "github:logos-co/logos-standalone-app";
+    logos-standalone-app.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
+    logos-standalone-app.inputs.logos-qt-sdk.follows = "logos-qt-sdk";
+    logos-standalone-app.inputs.logos-protocol.follows = "logos-protocol";
+    logos-standalone-app.inputs.logos-liblogos.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
+    logos-standalone-app.inputs.logos-liblogos.inputs.logos-qt-sdk.follows = "logos-qt-sdk";
+    logos-standalone-app.inputs.logos-liblogos.inputs.logos-protocol.follows = "logos-protocol";
     logos-standalone-app.inputs.logos-design-system.follows = "logos-design-system";
     logos-standalone-app.inputs.logos-view-module-runtime.follows = "logos-view-module-runtime";
     # Test framework for module unit tests
@@ -129,12 +140,20 @@
           inherit pkgs system logos-nix logos-standalone-app;
           inherit (inputs) logos-design-system;
         };
+        ui-sdk-inputs = import ./tests/test-ui-sdk-inputs.nix {
+          inherit pkgs system inputs;
+        };
+        ui-sdk-contract = import ./tests/test-ui-sdk-contract.nix {
+          inherit pkgs system;
+        };
         default = import ./tests {
           inherit pkgs;
           inherit (nixpkgs) lib;
           inherit (lib) parseMetadata common mkExternalLib;
           validationChecks = [
             self.checks.${system}.rust-crate-downloads
+            self.checks.${system}.ui-sdk-inputs
+            self.checks.${system}.ui-sdk-contract
             self.checks.${system}.qt-host-repoint
             self.checks.${system}.host-codegen-wiring
             self.checks.${system}.qt-input-contract
