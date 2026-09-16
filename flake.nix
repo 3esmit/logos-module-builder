@@ -132,6 +132,7 @@
             self.checks.${system}.host-codegen-wiring
             self.checks.${system}.qt-input-contract
             self.checks.${system}.doctest-source
+            self.checks.${system}.template-helper-precedence
           ];
         };
         # Integration test: actually builds a QML module from a fixture
@@ -161,6 +162,9 @@
         };
         qt-input-contract = import ./tests/test-qt-input-contract.nix {
           inherit pkgs inputs;
+        };
+        template-helper-precedence = import ./tests/test-template-helper-precedence.nix {
+          inherit pkgs;
         };
         doctest-source = pkgs.runCommand "doctest-source-tests" {
           nativeBuildInputs = [ pkgs.python3 ];

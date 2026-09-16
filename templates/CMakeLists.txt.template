@@ -23,11 +23,12 @@ set(CMAKE_MODULE_PATH
     "${CMAKE_CURRENT_SOURCE_DIR}/vendor/logos-module-builder/cmake"
 )
 
-# Try to find LogosModule.cmake
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cmake/LogosModule.cmake")
-    include(cmake/LogosModule.cmake)
-elseif(DEFINED ENV{LOGOS_MODULE_BUILDER_ROOT})
+# Try to find LogosModule.cmake. The builder-provided helper is authoritative
+# when configured; a module-local copy is only a fallback for standalone builds.
+if(DEFINED ENV{LOGOS_MODULE_BUILDER_ROOT})
     include($ENV{LOGOS_MODULE_BUILDER_ROOT}/cmake/LogosModule.cmake)
+elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cmake/LogosModule.cmake")
+    include(cmake/LogosModule.cmake)
 else()
     # Fallback: download or error
     message(FATAL_ERROR "LogosModule.cmake not found. Please install logos-module-builder or set LOGOS_MODULE_BUILDER_ROOT")
