@@ -2,7 +2,7 @@
 # resolution, plugin compilation (via backend), header generation, dev shells,
 # and LGX bundling.  Callers (mkLogosModule, mkLogosQmlModule) compose final
 # `packages` and `apps` outputs differently.
-{ nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-plugin-qt ? null, logos-view-module, logos-module, uiBackend, coreBackend, builderRoot, nix-bundle-lgx, nix-bundle-logos-module-install }:
+{ nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-plugin-qt ? null, logos-view-module ? null, logos-module, uiBackend, coreBackend, builderRoot, nix-bundle-lgx, nix-bundle-logos-module-install }:
 
 {
   src,
@@ -203,7 +203,7 @@ let
       # dimension, and logos-view-module publishes only the four NATIVE
       # systems, so `packages.x86_64-windows` would EVAL-fail on the Windows leg.
       viewTemplates =
-        logos-view-module.packages.${common.buildSystemFor system}.logos-view-templates;
+        (common.requireViewModule logos-view-module).packages.${common.buildSystemFor system}.logos-view-templates;
       # The VIEW plugin glue generator (`--backend ui`). It lives in
       # logos-view-module, beside the LogosView*.in templates the glue it emits
       # is compiled against and beside logos_ui_plugin_context.h, which that
@@ -415,7 +415,7 @@ let
       # dimension, and logos-view-module publishes only the four NATIVE
       # systems, so `packages.x86_64-windows` would EVAL-fail on the Windows leg.
       viewTemplates =
-        logos-view-module.packages.${common.buildSystemFor system}.logos-view-templates;
+        (common.requireViewModule logos-view-module).packages.${common.buildSystemFor system}.logos-view-templates;
       # The VIEW plugin glue generator (`--backend ui`). It lives in
       # logos-view-module, beside the LogosView*.in templates the glue it emits
       # is compiled against and beside logos_ui_plugin_context.h, which that

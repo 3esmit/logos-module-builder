@@ -12,6 +12,8 @@ let
   complete = import ../lib args;
   omitted = import ../lib (builtins.removeAttrs args [ "logos-plugin-qt" ]);
   explicitNull = import ../lib (args // { logos-plugin-qt = null; });
+  viewOmitted = import ../lib (builtins.removeAttrs args [ "logos-view-module" ]);
+  viewExplicitNull = import ../lib (args // { logos-view-module = null; });
   system = pkgs.stdenv.hostPlatform.system;
   modules = builder: {
     core = builder.mkLogosModule {
@@ -53,7 +55,20 @@ let
     (check "core LIDL unchanged" (m.core.packages.${system}.lidl.drvPath == normal.core.packages.${system}.lidl.drvPath))
     (check "Rust LIDL unchanged" (m.rust.packages.${system}.lidl.drvPath == normal.rust.packages.${system}.lidl.drvPath))
   ];
-  count = builtins.deepSeq (lib.concatMap checksFor withoutQt) (builtins.length withoutQt * 10);
+  viewChecksFor = m: [
+    (rejects "core package requires view templates" m.core.packages.${system}.lib)
+    (rejects "UI backend requires view templates" m.ui.packages.${system}.default)
+    (check "QML-only package unchanged without view module"
+      (m.qml.packages.${system}.default.drvPath == normal.qml.packages.${system}.default.drvPath))
+    (check "core LIDL unchanged without view module"
+      (m.core.packages.${system}.lidl.drvPath == normal.core.packages.${system}.lidl.drvPath))
+    (check "Rust LIDL unchanged without view module"
+      (m.rust.packages.${system}.lidl.drvPath == normal.rust.packages.${system}.lidl.drvPath))
+  ];
+  withoutView = [ (modules viewOmitted) (modules viewExplicitNull) ];
+  count = builtins.deepSeq
+    ((lib.concatMap checksFor withoutQt) ++ (lib.concatMap viewChecksFor withoutView))
+    ((builtins.length withoutQt * 10) + (builtins.length withoutView * 5));
   preserved = builtins.head withoutQt;
 in pkgs.runCommand "qt-input-contract-tests" {} ''
   # Realize the unchanged non-Qt outputs too; merely constructing an attrset
