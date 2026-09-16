@@ -2,7 +2,7 @@
 # This is the main entry point for building Logos modules.
 # Plugin compilation and header generation are delegated to a backend selected
 # by metadata.json "type": core modules use coreBackend, UI modules use uiBackend.
-{ nixpkgs, lib, common, parseMetadata, builderRoot, uiBackend, coreBackend, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-plugin-qt ? null, logos-view-module, logos-module, logos-test-framework, logos-rust-sdk ? null, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app, rust-overlay ? null }:
+{ nixpkgs, lib, common, parseMetadata, builderRoot, uiBackend, coreBackend, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-plugin-qt ? null, logos-view-module ? null, logos-module, logos-test-framework, logos-rust-sdk ? null, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app, rust-overlay ? null }:
 
 {
   # Required: Path to the module source
@@ -371,7 +371,7 @@ let
       # NATIVE systems, so `packages.x86_64-windows` would EVAL-fail on the
       # Windows leg — a failure that is invisible until someone crosses.
       viewTemplates =
-        logos-view-module.packages.${common.buildSystemFor system}.logos-view-templates;
+        (common.requireViewModule logos-view-module).packages.${common.buildSystemFor system}.logos-view-templates;
       logosProtocolPkg = logos-protocol.packages.${system}.default;
       logosModule = logos-module.packages.${system}.default;
 
@@ -883,7 +883,7 @@ let
       # NATIVE systems, so `packages.x86_64-windows` would EVAL-fail on the
       # Windows leg — a failure that is invisible until someone crosses.
       viewTemplates =
-        logos-view-module.packages.${common.buildSystemFor system}.logos-view-templates;
+        (common.requireViewModule logos-view-module).packages.${common.buildSystemFor system}.logos-view-templates;
       logosProtocolPkg = logos-protocol.packages.${system}.default;
       logosModule = logos-module.packages.${system}.default;
 

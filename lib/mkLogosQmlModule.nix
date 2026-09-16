@@ -1,7 +1,7 @@
 # ui_qml module builder — QML view + optional C++ backend (process-isolated).
 # Calls buildCppPlugin only when config.main is set; the resulting `combined`
 # output bundles the plugin .so (when present) with the QML view directory.
-{ nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-plugin-qt ? null, logos-view-module, logos-module, uiBackend, coreBackend, builderRoot, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app }:
+{ nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-plugin-qt ? null, logos-view-module ? null, logos-module, uiBackend, coreBackend, builderRoot, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app }:
 
 {
   # Required: Path to the module source
