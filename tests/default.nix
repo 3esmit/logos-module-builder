@@ -1,7 +1,7 @@
 # Test runner for logos-module-builder
-# All tests are pure Nix evaluation — no compilation needed.
+# Unit assertions are pure Nix evaluation; validationChecks adds boundary probes.
 # Usage: nix build .#checks.<system>.default
-{ pkgs, lib, parseMetadata, common, mkExternalLib, fixturesRoot ? ./fixtures }:
+{ pkgs, lib, parseMetadata, common, mkExternalLib, fixturesRoot ? ./fixtures, validationChecks ? [] }:
 
 let
   # Helper: assert with message. Throws on failure.
@@ -42,5 +42,6 @@ in pkgs.runCommand "logos-module-builder-tests" {} ''
   echo "Running logos-module-builder tests..."
   echo "All ${builtins.toString allPassed} tests passed."
   mkdir -p $out
+  ${lib.concatMapStringsSep "\n" (check: "test -f ${check}/results.txt") validationChecks}
   echo "${builtins.toString allPassed} tests passed" > $out/results.txt
 ''
