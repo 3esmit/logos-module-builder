@@ -64,7 +64,7 @@ let
         let
           input = depInputs.${name};
           tdeps = (input.config or {}).dependencies or [];
-          tinputs = input.inputs or {};
+          tinputs = input.moduleInputs or (input.inputs or {});
         in
           if tdeps == [] then acc
           else acc // (collectAllModuleDeps system tinputs tdeps)
@@ -223,6 +223,22 @@ in {
   inherit systems mkPkgs mkPkgsWith forAllSystems buildSystemFor resolveLegacyHeaderDeps;
 
   inherit collectAllModuleDeps;
+
+  # Keep this lazy: QML-only packages and published LIDL do not need a host.
+  # Qt build/generator/test outputs must fail with a wiring diagnostic instead
+  # of dereferencing an optional null input.
+  requireQtPlugin = input:
+    if input == null then
+      throw "logos-module-builder: this Qt build output requires the logos-plugin-qt input; pass it when importing the builder library."
+    else input;
+
+  # Keep this lazy: QML-only packages and published LIDL do not instantiate
+  # replica-factory templates. C++/REP outputs must fail with a wiring
+  # diagnostic instead of dereferencing an optional null input.
+  requireViewModule = input:
+    if input == null then
+      throw "logos-module-builder: this C++/REP build output requires the logos-view-module input; pass it when importing the builder library."
+    else input;
 
 
 

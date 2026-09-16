@@ -8,19 +8,24 @@
     rust-overlay.url = "github:oxalica/rust-overlay";
     rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
     # SDK and module deps — owned by this builder, injected into backends
-    logos-cpp-sdk.url = "github:3esmit/logos-cpp-sdk?rev=790030b442f3fc210f973fb2b8807e3495ee9724";
+    logos-cpp-sdk.url = "github:3esmit/logos-cpp-sdk?rev=cbcc4f73e13ccc022942323f729dc7b32d4c2839";
     logos-cpp-sdk.inputs.logos-protocol.follows = "logos-protocol";
     # Protocol layer (transports + lp_* C ABI + the protocol semver every
     # module gets stamped with) and the Qt developer layer modules link.
-    logos-protocol.url = "github:3esmit/logos-protocol?rev=dbd1df94caeb3e073c330fc3d95988ce1086b1a5";
-    logos-qt-sdk.url = "github:3esmit/logos-qt-sdk?rev=49cc49450de1db0168b687b52422beeefd55761c";
+    logos-protocol.url = "github:3esmit/logos-protocol?rev=f090940772eb74f6cfac0febdecd521f05a264c7";
+    logos-qt-sdk.url = "github:3esmit/logos-qt-sdk?rev=17ea23fbbff01be365c60a57062f7fef294909bb";
     logos-qt-sdk.inputs.logos-protocol.follows = "logos-protocol";
     logos-qt-sdk.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
+    logos-qt-sdk.inputs.logos-plugin-qt.follows = "logos-plugin-qt";
     logos-module.url = "github:logos-co/logos-module";
     # UI modules (type: ui, ui_qml) always use Qt
-    logos-plugin-qt.url = "github:logos-co/logos-plugin-qt";
+    logos-plugin-qt.url = "github:logos-co/logos-plugin-qt/9b2c64e5a480245b5333e20183a4a3c572d543cc";
+    logos-plugin-qt.inputs.logos-protocol.follows = "logos-protocol";
+    logos-plugin-qt.inputs.logos-nix.follows = "logos-nix";
     # Core modules (type: core) use this backend — defaults to Qt, swappable later
-    logos-plugin-core.url = "github:logos-co/logos-plugin-qt";
+    logos-plugin-core.follows = "logos-plugin-qt";
+    logos-view-module.url = "github:logos-co/logos-view-module/1f95a75f836a7601bde3b488dc2e773c4ebb9068";
+    logos-view-module.inputs.logos-nix.follows = "logos-nix";
     nix-bundle-lgx.url = "github:logos-co/nix-bundle-lgx";
     nix-bundle-logos-module-install.url = "github:logos-co/nix-bundle-logos-module-install";
     # Host shell used by `nix run` / integration tests for ui_qml modules.
@@ -28,27 +33,49 @@
     # standalone's lock) so a bump for module testing is one lock update on
     # this flake — no standalone release required.
     logos-design-system.url = "github:logos-co/logos-design-system";
+    # The design system uses lib.forAllTargets; keep its transitive API on the
+    # same logos-nix revision as this builder.
+    logos-design-system.inputs.logos-nix.follows = "logos-nix";
     logos-view-module-runtime.url = "github:3esmit/logos-view-module-runtime?rev=8aac03585bba147df1ea409af5ac177cf967713d";
+    # The view runtime, host shell and liblogos_core link the same C++ SDK
+    # types. Keep their SDK/protocol artifacts identical to module plugins.
+    logos-view-module-runtime.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
+    logos-view-module-runtime.inputs.logos-qt-sdk.follows = "logos-qt-sdk";
+    logos-view-module-runtime.inputs.logos-protocol.follows = "logos-protocol";
+    # Own the linked core explicitly; older Nix does not preserve deeper
+    # overrides through standalone's liblogos input.
+    logos-liblogos.url = "github:logos-co/logos-liblogos/2f4162a97f3b6d8f469ac669cd0f198f604606ca";
+    logos-liblogos.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
+    logos-liblogos.inputs.logos-qt-sdk.follows = "logos-qt-sdk";
+    logos-liblogos.inputs.logos-protocol.follows = "logos-protocol";
     logos-standalone-app.url = "github:logos-co/logos-standalone-app";
+    logos-standalone-app.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
+    logos-standalone-app.inputs.logos-qt-sdk.follows = "logos-qt-sdk";
+    logos-standalone-app.inputs.logos-protocol.follows = "logos-protocol";
+    logos-standalone-app.inputs.logos-liblogos.follows = "logos-liblogos";
     logos-standalone-app.inputs.logos-design-system.follows = "logos-design-system";
     logos-standalone-app.inputs.logos-view-module-runtime.follows = "logos-view-module-runtime";
     # Test framework for module unit tests
-    logos-test-framework.url = "github:logos-co/logos-test-framework";
+    # Host-runtime split, before CallCaller requires the next SDK API revision.
+    logos-test-framework.url = "github:logos-co/logos-test-framework/5f75c9418b7c842f1750bfde31accf3d0cba283d";
     logos-test-framework.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
+    logos-test-framework.inputs.logos-qt-sdk.follows = "logos-qt-sdk";
+    logos-test-framework.inputs.logos-plugin-qt.follows = "logos-plugin-qt";
+    logos-test-framework.inputs.logos-protocol.follows = "logos-protocol";
     # The Rust SDK provides logos-lidl-gen (the generator the builder runs for
     # codegen.rust modules) and the SDK source the crate links. logos-rust-sdk
     # depends BACK on this builder for its own integration tests, so its
     # logos-module-builder input is cut with `follows` to break the cycle — we
     # only consume its lidl-gen package + source tree, never its tests. The other
     # branch-pinned test-only inputs are cut too so they aren't fetched.
-    logos-rust-sdk.url = "github:logos-co/logos-rust-sdk/0b4b8edd5127378b78890297f5fcec738b81f8e2";
+    logos-rust-sdk.url = "github:logos-co/logos-rust-sdk/a3d0d719e396bb5a8805527eb88702bcb400d2e5";
     logos-rust-sdk.inputs.logos-nix.follows = "logos-nix";
     logos-rust-sdk.inputs.logos-module-builder.follows = "logos-cpp-sdk";
     logos-rust-sdk.inputs.logos-logoscore-cli.follows = "logos-cpp-sdk";
     nixpkgs.follows = "logos-nix/nixpkgs";
   };
 
-  outputs = inputs@{ self, nixpkgs, logos-nix, logos-cpp-sdk, logos-protocol, logos-qt-sdk, logos-module, logos-plugin-qt, logos-plugin-core, nix-bundle-logos-module-install, nix-bundle-lgx, logos-standalone-app, logos-test-framework, logos-rust-sdk, rust-overlay ? null, ... }:
+  outputs = inputs@{ self, nixpkgs, logos-nix, logos-cpp-sdk, logos-protocol, logos-qt-sdk, logos-module, logos-plugin-qt, logos-plugin-core, logos-view-module, nix-bundle-logos-module-install, nix-bundle-lgx, logos-standalone-app, logos-test-framework, logos-rust-sdk, rust-overlay ? null, ... }:
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
 
@@ -63,6 +90,7 @@
         inherit nixpkgs nix-bundle-lgx nix-bundle-logos-module-install logos-standalone-app;
         inherit logos-nix;
         inherit logos-cpp-sdk logos-protocol logos-qt-sdk logos-module logos-test-framework logos-rust-sdk;
+        inherit logos-plugin-qt logos-view-module;
         inherit rust-overlay;
         inherit (nixpkgs) lib;
         uiBackend = logos-plugin-qt.rawLib or logos-plugin-qt.lib;
@@ -110,21 +138,47 @@
         };
       };
 
-      # Unit contracts and native integration checks.
+      # Tests — pure Nix evaluation tests (no compilation)
       checks = forAllSystems ({ pkgs, system, ... }: {
         rust-crate-downloads = import ./tests/test-rust-crate-downloads.nix {
           inherit pkgs inputs;
         };
+        design-system-input = import ./tests/test-design-system-input.nix {
+          inherit pkgs system logos-nix logos-standalone-app;
+          inherit (inputs) logos-design-system;
+        };
+        ui-sdk-inputs = import ./tests/test-ui-sdk-inputs.nix {
+          inherit pkgs system inputs;
+        };
+        ui-sdk-contract = import ./tests/test-ui-sdk-contract.nix {
+          inherit pkgs system;
+        };
+        rust-module-load = import ./tests/test-rust-module-load.nix {
+          inherit pkgs;
+          mkLogosModule = lib.mkLogosModule;
+          fixturesRoot = ./tests/fixtures;
+        };
         default = import ./tests {
           inherit pkgs;
           inherit (nixpkgs) lib;
-          inherit (lib) parseMetadata common mkExternalLib;
-          validationChecks = [ self.checks.${system}.rust-crate-downloads ];
+          inherit (lib) parseMetadata common mkExternalLib mkLogosModule mkLogosQmlModule;
+          validationChecks = [
+            self.checks.${system}.rust-crate-downloads
+            self.checks.${system}.ui-sdk-inputs
+            self.checks.${system}.ui-sdk-contract
+            self.checks.${system}.qt-host-repoint
+            self.checks.${system}.host-codegen-wiring
+            self.checks.${system}.qt-input-contract
+            self.checks.${system}.doctest-source
+            self.checks.${system}.template-helper-precedence
+            self.checks.${system}.rust-module-load
+          ];
         };
         # Integration test: actually builds a QML module from a fixture
         qml-integration = import ./tests/test-qml-integration.nix {
           inherit pkgs;
           mkLogosQmlModule = lib.mkLogosQmlModule;
+          mkLogosModule = lib.mkLogosModule;
           fixturesRoot = ./tests/fixtures;
         };
         # Integration test: builds and runs unit tests via logos-test-framework
@@ -138,6 +192,27 @@
         static-extlib = import ./tests/test-static-extlib.nix {
           inherit pkgs;
         };
+        qt-host-repoint = import ./tests/test-qt-host-repoint.nix {
+          inherit pkgs;
+        };
+        host-codegen-wiring = import ./tests/test-host-codegen-wiring.nix {
+          inherit pkgs logos-plugin-qt;
+          inherit (lib) common mkLogosModule mkLogosQmlModule;
+        };
+        qt-input-contract = import ./tests/test-qt-input-contract.nix {
+          inherit pkgs inputs;
+        };
+        template-helper-precedence = import ./tests/test-template-helper-precedence.nix {
+          inherit pkgs;
+        };
+        doctest-source = pkgs.runCommand "doctest-source-tests" {
+          nativeBuildInputs = [ pkgs.python3 ];
+        } ''
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 -m unittest discover -s ${./.}/tests -p 'test_prepare_doctests.py'
+          mkdir -p $out
+          echo passed > $out/results.txt
+        '';
         # Integration test: a Rust cdylib module with an external system build dep
         # declared via the `nix.rust` block — proves pkg-config/openssl-style deps
         # reach the crate's buildRustPackage compile.
