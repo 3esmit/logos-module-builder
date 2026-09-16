@@ -3692,7 +3692,9 @@
     },
     "logos-design-system": {
       "inputs": {
-        "logos-nix": "logos-nix_2",
+        "logos-nix": [
+          "logos-nix"
+        ],
         "nix-bundle-appimage": "nix-bundle-appimage",
         "nix-bundle-dir": "nix-bundle-dir",
         "nix-bundle-macos-app": "nix-bundle-macos-app",
