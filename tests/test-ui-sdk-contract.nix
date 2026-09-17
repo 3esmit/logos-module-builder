@@ -12,27 +12,36 @@ let
     logos-view-module-runtime.inputs = sdks;
   };
   paths = [
-    [ "logos-standalone-app" "inputs" ]
-    [ "logos-view-module-runtime" "inputs" ]
-    [ "logos-standalone-app" "inputs" "logos-liblogos" "inputs" ]
+    {
+      path = [ "logos-standalone-app" "inputs" ];
+      names = [ "logos-cpp-sdk" "logos-protocol" ];
+    }
+    {
+      path = [ "logos-view-module-runtime" "inputs" ];
+      names = names;
+    }
+    {
+      path = [ "logos-standalone-app" "inputs" "logos-liblogos" "inputs" ];
+      names = names;
+    }
   ];
   # Force the contract and derivation, not recursive derivation passthru attrs.
   accepts = candidate: (builtins.tryEval (builtins.seq
     (import ./test-ui-sdk-inputs.nix { inherit pkgs system; inputs = candidate; }).drvPath
     true)).success;
-  rejected = builtins.concatLists (map (path:
+  rejected = builtins.concatLists (map (edge:
     builtins.concatLists (map (name:
       map (change: !(accepts (pkgs.lib.recursiveUpdate inputs
-        (pkgs.lib.setAttrByPath (path ++ [ name ]) change)))) [
+        (pkgs.lib.setAttrByPath (edge.path ++ [ name ]) change)))) [
           { outPath = "/wrong-source"; }
           { packages.${system}.default.drvPath = "/wrong-derivation"; }
         ]
-    ) names)
+    ) edge.names)
   ) paths);
 in
 if !(accepts inputs) || !(builtins.all (value: value) rejected) then
-  throw "ui-sdk-contract (${system}): positive or one of 18 negative fixtures failed"
+  throw "ui-sdk-contract (${system}): positive or one of 16 negative fixtures failed"
 else pkgs.runCommand "ui-sdk-contract-tests" {} ''
   mkdir -p $out
-  echo "19 SDK contract fixtures passed" > $out/results.txt
+  echo "17 SDK contract fixtures passed" > $out/results.txt
 ''

@@ -2,7 +2,7 @@
 # resolution, plugin compilation (via backend), header generation, dev shells,
 # and LGX bundling.  Callers (mkLogosModule, mkLogosQmlModule) compose final
 # `packages` and `apps` outputs differently.
-{ nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-plugin-qt ? null, logos-view-module ? null, logos-module, uiBackend, coreBackend, builderRoot, nix-bundle-lgx, nix-bundle-logos-module-install }:
+{ nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-plugin-qt ? null, logos-view-module, logos-module, uiBackend, coreBackend, builderRoot, nix-bundle-lgx, nix-bundle-logos-module-install }:
 
 {
   src,
@@ -183,7 +183,7 @@ let
       # logos-qt-sdk stays for what the host runtime never carried: the
       # Qt-typed logos_qt_lp_bridge.h / logos_qt_wire.h / logos_ui_plugin_context.h
       # and the logos-qt-generator that emits #includes of them.
-      logosQtHost = qtPlugin.packages.${system}.logos-qt-host;
+      logosQtHost = logos-plugin-qt.packages.${system}.logos-qt-host;
       # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
       # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
       logosQtGenerator = logos-qt-sdk.packages.${common.buildSystemFor system}.logos-qt-generator;
@@ -193,7 +193,7 @@ let
       # compile error — it silently emits STALE glue. That is how a
       # host-services grant went undelivered while every build stayed green.
       logosQtHostGenerator =
-        qtPlugin.packages.${common.buildSystemFor system}.logos-qt-host-generator;
+        logos-plugin-qt.packages.${common.buildSystemFor system}.logos-qt-host-generator;
       # The four LogosView*.in templates logos_module(REP_FILE ...) instantiates
       # — and this is the ui_qml path, so effectively every consumer of them.
       # They live in logos-view-module now, not in the plugin backend, and
@@ -396,6 +396,7 @@ let
       # no-op off the Windows target.
       logosSdkBuild = logos-cpp-sdk.packages.${common.buildSystemFor system}.default;
       logosQtSdk = logos-qt-sdk.packages.${system}.default;
+      logosQtHost = qtPlugin.packages.${system}.logos-qt-host;
       # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
       # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
       logosQtGenerator = logos-qt-sdk.packages.${common.buildSystemFor system}.logos-qt-generator;
@@ -405,7 +406,7 @@ let
       # compile error — it silently emits STALE glue. That is how a
       # host-services grant went undelivered while every build stayed green.
       logosQtHostGenerator =
-        qtPlugin.packages.${common.buildSystemFor system}.logos-qt-host-generator;
+        logos-plugin-qt.packages.${common.buildSystemFor system}.logos-qt-host-generator;
       # The four LogosView*.in templates logos_module(REP_FILE ...) instantiates
       # — and this is the ui_qml path, so effectively every consumer of them.
       # They live in logos-view-module now, not in the plugin backend, and
@@ -466,10 +467,17 @@ let
       default = pkgs.mkShell {
         # logosViewGenerator: this is the ui_qml dev shell, so it is exactly
         # the shell where someone hand-runs the view glue codegen.
-        nativeBuildInputs = backendShell.nativeBuildInputs ++ buildPkgs ++ [ logosViewGenerator ];
+        nativeBuildInputs = backendShell.nativeBuildInputs ++ buildPkgs ++ [
+          logosQtGenerator
+          logosQtHostGenerator
+          logosViewGenerator
+        ];
         buildInputs = backendShell.buildInputs ++ runtimePkgs;
         shellHook = ''
           ${backendShell.shellHook}
+          export LOGOS_QT_SDK_ROOT="${logosQtSdk}"
+          export LOGOS_QT_HOST_ROOT="${logosQtHost}"
+          export LOGOS_PROTOCOL_ROOT="${logosProtocolPkg}"
           # The backend no longer exports this — it stopped shipping a
           # cmake/LogosModule.cmake for it to point at.
           export LOGOS_MODULE_BUILDER_ROOT="${cmakeRoot}"

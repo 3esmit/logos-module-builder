@@ -2,7 +2,7 @@
 # This is the main entry point for building Logos modules.
 # Plugin compilation and header generation are delegated to a backend selected
 # by metadata.json "type": core modules use coreBackend, UI modules use uiBackend.
-{ nixpkgs, lib, common, parseMetadata, builderRoot, uiBackend, coreBackend, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-plugin-qt ? null, logos-view-module ? null, logos-module, logos-test-framework, logos-rust-sdk ? null, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app, rust-overlay ? null }:
+{ nixpkgs, lib, common, parseMetadata, builderRoot, uiBackend, coreBackend, logos-cpp-sdk, logos-protocol ? null, logos-qt-sdk ? null, logos-plugin-qt ? null, logos-view-module, logos-module, logos-test-framework, logos-rust-sdk ? null, nix-bundle-lgx, nix-bundle-logos-module-install, logos-standalone-app, rust-overlay ? null }:
 
 {
   # Required: Path to the module source
@@ -375,7 +375,7 @@ let
       # logos-qt-sdk stays for what the host runtime never carried: the
       # Qt-typed logos_qt_lp_bridge.h / logos_qt_wire.h / logos_ui_plugin_context.h
       # and the logos-qt-generator that emits #includes of them.
-      logosQtHost = qtPlugin.packages.${system}.logos-qt-host;
+      logosQtHost = logos-plugin-qt.packages.${system}.logos-qt-host;
       # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
       # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
       logosQtGenerator = logos-qt-sdk.packages.${common.buildSystemFor system}.logos-qt-generator;
@@ -385,7 +385,7 @@ let
       # compile error — it silently emits STALE glue. That is how a
       # host-services grant went undelivered while every build stayed green.
       logosQtHostGenerator =
-        qtPlugin.packages.${common.buildSystemFor system}.logos-qt-host-generator;
+        logos-plugin-qt.packages.${common.buildSystemFor system}.logos-qt-host-generator;
       # The four LogosView*.in templates logos_module(REP_FILE ...) instantiates.
       # They live in logos-view-module (the ui_qml authoring flavour), NOT in
       # the plugin backend any more, and cmake/LogosModule.cmake here refuses to
@@ -1061,7 +1061,7 @@ let
       logosSdkBuild = logos-cpp-sdk.packages.${common.buildSystemFor system}.default;
       logosQtSdk = logos-qt-sdk.packages.${system}.default;
       # Same repoint in the dev shell: LOGOS_QT_HOST_ROOT below.
-      logosQtHost = qtPlugin.packages.${system}.logos-qt-host;
+      logosQtHost = logos-plugin-qt.packages.${system}.logos-qt-host;
       # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
       # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
       logosQtGenerator = logos-qt-sdk.packages.${common.buildSystemFor system}.logos-qt-generator;
@@ -1071,7 +1071,7 @@ let
       # compile error — it silently emits STALE glue. That is how a
       # host-services grant went undelivered while every build stayed green.
       logosQtHostGenerator =
-        qtPlugin.packages.${common.buildSystemFor system}.logos-qt-host-generator;
+        logos-plugin-qt.packages.${common.buildSystemFor system}.logos-qt-host-generator;
       # The four LogosView*.in templates logos_module(REP_FILE ...) instantiates.
       # They live in logos-view-module (the ui_qml authoring flavour), NOT in
       # the plugin backend any more, and cmake/LogosModule.cmake here refuses to
@@ -1127,7 +1127,12 @@ let
         (lib.mapAttrs resolveExtInputDev externalLibInputs);
     in {
       default = pkgs.mkShell {
-        nativeBuildInputs = backendShell.nativeBuildInputs ++ buildPkgs ++ [ logosSdkBuild logosViewGenerator ];
+        nativeBuildInputs = backendShell.nativeBuildInputs ++ buildPkgs ++ [
+          logosSdkBuild
+          logosQtGenerator
+          logosQtHostGenerator
+          logosViewGenerator
+        ];
         buildInputs = backendShell.buildInputs ++ runtimePkgs ++ lib.attrValues devExternalLibs;
         shellHook = ''
           ${backendShell.shellHook}
@@ -1258,7 +1263,7 @@ let
 
 in {
   packages = finalPackages;
-  # Composed modules need the dependency graph normally supplied by flake inputs.
+  # Preserve composed dependency inputs for transitive LGX bundling.
   moduleInputs = flakeInputs;
   inherit devShells config;
   # The RESOLVED config, per target. `config` above cannot answer for a

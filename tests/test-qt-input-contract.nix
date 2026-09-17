@@ -39,37 +39,49 @@ let
     };
   };
   normal = modules complete;
-  withoutQt = [ (modules omitted) (modules explicitNull) ];
   check = name: condition: if condition then true else throw "Qt input contract: ${name}";
-  rejects = name: value:
-    check name (!(builtins.tryEval value.drvPath).success);
-  checksFor = m: [
-    (rejects "core package requires Qt host" m.core.packages.${system}.lib)
-    (rejects "core generator requires Qt host" m.core.packages.${system}.generate)
-    (rejects "core dev shell requires Qt host" m.core.devShells.${system}.default)
-    (rejects "UI backend requires Qt host" m.ui.packages.${system}.default)
-    (rejects "UI generator requires Qt host" m.ui.packages.${system}.generate)
-    (rejects "UI dev shell requires Qt host" m.ui.devShells.${system}.default)
-    (rejects "module tests require Qt host" m.tests.${system}.unit-tests)
-    (check "QML-only package unchanged" (m.qml.packages.${system}.default.drvPath == normal.qml.packages.${system}.default.drvPath))
-    (check "core LIDL unchanged" (m.core.packages.${system}.lidl.drvPath == normal.core.packages.${system}.lidl.drvPath))
-    (check "Rust LIDL unchanged" (m.rust.packages.${system}.lidl.drvPath == normal.rust.packages.${system}.lidl.drvPath))
+  force = builder: moduleName: output:
+    builtins.tryEval (
+      let module = (modules builder).${moduleName};
+      in module.packages.${system}.${output}.drvPath
+    );
+  forceDevShell = builder: moduleName:
+    builtins.tryEval ((modules builder).${moduleName}.devShells.${system}.default.drvPath);
+  forceTests = builder:
+    builtins.tryEval ((modules builder).tests.${system}.unit-tests.drvPath);
+  rejects = name: result: check name (!result.success);
+  preserves = name: result: expected:
+    check name (result.success && result.value == expected);
+  normalQml = force complete "qml" "default";
+  normalCoreLidl = force complete "core" "lidl";
+  normalRustLidl = force complete "rust" "lidl";
+  withoutQt = [ omitted explicitNull ];
+  qtChecks = builder: [
+    (rejects "core package requires Qt host" (force builder "core" "lib"))
+    (rejects "core generator requires Qt host" (force builder "core" "generate"))
+    (rejects "core dev shell requires Qt host" (forceDevShell builder "core"))
+    (rejects "UI backend requires Qt host" (force builder "ui" "default"))
+    (rejects "UI generator requires Qt host" (force builder "ui" "generate"))
+    (rejects "UI dev shell requires Qt host" (forceDevShell builder "ui"))
+    (rejects "module tests require Qt host" (forceTests builder))
+    (preserves "QML-only package unchanged" (force builder "qml" "default") normalQml.value)
+    (preserves "core LIDL unchanged" (force builder "core" "lidl") normalCoreLidl.value)
+    (preserves "Rust LIDL unchanged" (force builder "rust" "lidl") normalRustLidl.value)
   ];
-  viewChecksFor = m: [
-    (rejects "core package requires view templates" m.core.packages.${system}.lib)
-    (rejects "UI backend requires view templates" m.ui.packages.${system}.default)
-    (check "QML-only package unchanged without view module"
-      (m.qml.packages.${system}.default.drvPath == normal.qml.packages.${system}.default.drvPath))
-    (check "core LIDL unchanged without view module"
-      (m.core.packages.${system}.lidl.drvPath == normal.core.packages.${system}.lidl.drvPath))
-    (check "Rust LIDL unchanged without view module"
-      (m.rust.packages.${system}.lidl.drvPath == normal.rust.packages.${system}.lidl.drvPath))
+  viewChecks = builder: [
+    (rejects "core package requires view templates" (force builder "core" "lib"))
+    (rejects "UI backend requires view templates" (force builder "ui" "default"))
+    (preserves "QML-only package unchanged without view module"
+      (force builder "qml" "default") normalQml.value)
+    (preserves "core LIDL unchanged without view module"
+      (force builder "core" "lidl") normalCoreLidl.value)
+    (preserves "Rust LIDL unchanged without view module"
+      (force builder "rust" "lidl") normalRustLidl.value)
   ];
-  withoutView = [ (modules viewOmitted) (modules viewExplicitNull) ];
   count = builtins.deepSeq
-    ((lib.concatMap checksFor withoutQt) ++ (lib.concatMap viewChecksFor withoutView))
-    ((builtins.length withoutQt * 10) + (builtins.length withoutView * 5));
-  preserved = builtins.head withoutQt;
+    ((lib.concatMap qtChecks withoutQt) ++ (lib.concatMap viewChecks [ viewOmitted viewExplicitNull ]))
+    ((builtins.length withoutQt * 10) + 10);
+  preserved = modules (builtins.head withoutQt);
 in pkgs.runCommand "qt-input-contract-tests" {} ''
   # Realize the unchanged non-Qt outputs too; merely constructing an attrset
   # would not prove the optional input stays lazy through derivation creation.
