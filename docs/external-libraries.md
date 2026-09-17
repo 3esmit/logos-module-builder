@@ -12,11 +12,12 @@ How to wrap external C/C++ libraries in Logos modules.
 
 ## Overview
 
-Logos modules can wrap external C/C++ libraries to expose their functionality to the Logos ecosystem. There are three approaches:
+Logos modules can wrap external C/C++ libraries to expose their functionality to the Logos ecosystem. There are four approaches:
 
 1. **Vendor/Pre-built** — Library already compiled, in the `lib/` directory (simplest)
 2. **Flake Input (build from source)** — Library source as a flake input, built by `mkExternalLib` during nix build
-3. **Flake Input (Nix package)** — Library provided by a flake that has its own Nix build (`built_nix: true`)
+3. **Flake Input (Nix package)** — Library provided by a flake that has its own Nix build. Detected automatically with `lib.isDerivation`; there is no `built_nix` flag to set
+4. **Vendor Submodule** — Source in a git submodule, built by a `build_script`
 
 ## Approach 1: Vendor / Pre-built Library
 
@@ -236,6 +237,32 @@ externalLibInputs = {
 };
 ```
 
+### Builds published under another system
+
+The builder reads a target's build from the input's `packages.<system>`. Not
+every flake publishes it there: zerokit, for one, publishes its MinGW build
+under the platform that builds it (`packages.x86_64-linux.rln-windows-x86_64`)
+and has no `packages.x86_64-windows`. `systems.<system>` says where to look
+instead:
+
+```nix
+externalLibInputs = {
+  logosdelivery = {
+    input = inputs.logos-delivery;
+    packages.default = "liblogosdelivery";
+    systems.x86_64-windows = {
+      system = "x86_64-linux";   # read input.packages.x86_64-linux
+      packages.default = "liblogosdelivery-windows-x86_64";
+    };
+  };
+};
+```
+
+`system` defaults to the target itself, so an override can rename packages
+without moving. An override that moves must set `packages`, with the variant
+or a `default`: the other system's set also holds that system's own build
+under the usual names, and falling back to one would link the wrong platform.
+
 ## Approach 4: Vendor Submodule (Build from Source in Repo)
 
 Best for: Libraries requiring custom build scripts, where source lives in a git submodule.
@@ -323,32 +350,58 @@ find_library(EXTRA_LIB extralib PATHS ${CMAKE_CURRENT_SOURCE_DIR}/lib)
 target_link_libraries(my_module_module_plugin PRIVATE ${EXTRA_LIB})
 ```
 
-## Plugin Implementation
+### Staged layout and unit tests
+
+Before CMake runs, the module build and the unit-test build (`tests = { ... }`
+or `mkLogosModuleTests`) stage every resolved library into the module's `lib/`
+the same way. Both builds take the same `externalLibInputs`, and a bare flake
+input resolves to its `packages.<system>.default` in both. The library's
+`lib/*` and `include/*` are copied recursively, so `include/mylib/api.hpp`
+lands at `lib/mylib/api.hpp`. The staged copies are writable, so a
+`preConfigure` hook can edit them.
+
+`logos_test()` does not read `lib/` on its own. Point it there:
+```cmake
+logos_test(
+    NAME my_module_tests
+    MODULE_SOURCES ../src/my_module_impl.cpp
+    TEST_SOURCES main.cpp test_my_module.cpp
+    EXTRA_INCLUDES ../lib
+    EXTRA_LINK_LIBS ${CMAKE_CURRENT_SOURCE_DIR}/../lib/libmylib.a
+)
+```
+
+A library you mock with `mockCLibs` is not resolved, built or staged.
+
+## Module Implementation
+
+These snippets use the universal authoring model: you write only
+`src/my_module_impl.{h,cpp}`, its public methods are the module's API, and the
+code is **Qt-free** (`std::string`, not `QString`). The snippets here used to
+show a hand-written `MyModulePlugin` with `Q_OBJECT` / `eventResponse`; that
+class is generated now, and a core module that declares no `interface` is
+refused at evaluation.
 
 ### Including Headers
 
 ```cpp
-// In my_module_plugin.h
+// In my_module_impl.h
 #include "lib/libmylib.h"  // Include the C header
 ```
 
 ### Using the Library
 
 ```cpp
-// In my_module_plugin.cpp
-#include "my_module_plugin.h"
+// In my_module_impl.cpp
+#include "my_module_impl.h"
 #include "lib/libmylib.h"
 
-void MyModulePlugin::init() {
-    mylib_handle* handle = mylib_init();
-    if (!handle) {
-        qWarning() << "Failed to initialize mylib";
-        return;
-    }
-    m_handle = handle;
+bool MyModuleImpl::initLibrary() {
+    m_handle = mylib_init();
+    return m_handle != nullptr;
 }
 
-void MyModulePlugin::cleanup() {
+void MyModuleImpl::cleanup() {
     if (m_handle) {
         mylib_cleanup(m_handle);
         m_handle = nullptr;
@@ -361,9 +414,9 @@ void MyModulePlugin::cleanup() {
 C libraries often return allocated memory. Always free it:
 
 ```cpp
-QString MyModulePlugin::getData() {
+std::string MyModuleImpl::getData() {
     char* result = mylib_get_data(m_handle);
-    QString output = QString::fromUtf8(result);
+    std::string output = result ? result : "";
     mylib_free_string(result);  // Don't forget!
     return output;
 }
@@ -371,22 +424,32 @@ QString MyModulePlugin::getData() {
 
 ### Callbacks
 
-For C callbacks, use static methods:
+For C callbacks, use static methods and route the payload into a typed event.
+Declaring a method under `logos_events:` is all it takes — the generator writes
+the body, and calling it fans the payload out to every subscriber.
 
 ```cpp
-// Header
-class MyModulePlugin {
+// src/my_module_impl.h
+class MyModuleImpl : public LogosModuleContext {
+public:
+    void subscribe();
+
+logos_events:
+    /// Emitted for every callback the library delivers.
+    void libraryEvent(int64_t code, const std::string& message);
+
 private:
     static void callback(int code, const char* msg, void* user_data);
+    void* m_handle = nullptr;
 };
 
-// Implementation
-void MyModulePlugin::callback(int code, const char* msg, void* user_data) {
-    auto* plugin = static_cast<MyModulePlugin*>(user_data);
-    emit plugin->eventResponse("callback", QVariantList() << code << QString::fromUtf8(msg));
+// src/my_module_impl.cpp
+void MyModuleImpl::callback(int code, const char* msg, void* user_data) {
+    auto* self = static_cast<MyModuleImpl*>(user_data);
+    self->libraryEvent(code, msg ? msg : "");
 }
 
-void MyModulePlugin::subscribe() {
+void MyModuleImpl::subscribe() {
     mylib_subscribe(m_handle, callback, this);  // Pass 'this' as user_data
 }
 ```
@@ -473,6 +536,7 @@ Here's how the wallet module wraps go-wallet-sdk:
   "name": "wallet_module",
   "version": "1.0.0",
   "type": "core",
+  "interface": "universal",
   "category": "wallet",
   "main": "wallet_module_plugin",
   "dependencies": [],
@@ -490,17 +554,16 @@ Here's how the wallet module wraps go-wallet-sdk:
 }
 ```
 
-`wallet_module_plugin.cpp`:
+`src/wallet_module_impl.cpp`:
 ```cpp
+#include "wallet_module_impl.h"
 #include "lib/libgowalletsdk.h"
 
-bool WalletModulePlugin::initWallet(const QString& rpcUrl) {
+bool WalletModuleImpl::initWallet(const std::string& rpcUrl) {
     char* err = nullptr;
-    m_handle = GoWSK_ethclient_NewClient(rpcUrl.toUtf8().constData(), &err);
+    m_handle = GoWSK_ethclient_NewClient(rpcUrl.c_str(), &err);
     if (err) {
-        QString error = QString::fromUtf8(err);
         GoWSK_FreeCString(err);
-        qWarning() << "Wallet init failed:" << error;
         return false;
     }
     return true;

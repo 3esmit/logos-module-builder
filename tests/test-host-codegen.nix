@@ -2,11 +2,14 @@
 { lib, assertBool, parseMetadata }:
 let
   codegen = import ../lib/modulePreConfigure.nix { inherit lib; };
-  config = fields: parseMetadata.parseModuleConfig (builtins.toJSON ({
+  config = fields: parseMetadata.parseModuleConfig {
+    json = builtins.toJSON ({
     name = "probe_module";
     version = "1.0.0";
     interface = "universal";
-  } // fields));
+    } // fields);
+    platform = null;
+  };
   universal = codegen.autoCodegen (config {});
   multi = codegen.autoCodegen (config { concurrency = "multi"; });
   cdylib = codegen.autoCodegen (config {
@@ -23,6 +26,6 @@ in [
   (assertBool "cdylib preserves backend flag" (lib.hasInfix "--backend cdylib" cdylib) true)
   (assertBool "universal never uses retired SDK backend" (lib.hasInfix "logos-qt-generator --lidl" universal) false)
   (assertBool "cdylib never uses retired SDK backend" (lib.hasInfix "logos-qt-generator --lidl" cdylib) false)
-  (assertBool "UI uses SDK UI generator" (lib.hasInfix "logos-qt-generator --backend ui" ui) true)
+  (assertBool "UI uses view UI generator" (lib.hasInfix "logos-view-generator --backend ui" ui) true)
   (assertBool "UI never uses provider generator" (lib.hasInfix "logos-qt-host-generator" ui) false)
 ]
