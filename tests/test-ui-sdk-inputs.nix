@@ -7,7 +7,13 @@ let
     view-runtime = inputs.logos-view-module-runtime.inputs;
     core = inputs.logos-standalone-app.inputs.logos-liblogos.inputs;
   };
-  sdkNames = [ "logos-cpp-sdk" "logos-qt-sdk" "logos-protocol" ];
+  sdkNames = {
+    # standalone-app consumes the Qt SDK through its liblogos input rather
+    # than declaring a direct edge of its own.
+    standalone = [ "logos-cpp-sdk" "logos-protocol" ];
+    view-runtime = [ "logos-cpp-sdk" "logos-qt-sdk" "logos-protocol" ];
+    core = [ "logos-cpp-sdk" "logos-qt-sdk" "logos-protocol" ];
+  };
   checks = builtins.concatLists (map (consumer:
     map (sdk:
       let
@@ -19,9 +25,9 @@ let
       else if actual.packages.${system}.default.drvPath != expected.packages.${system}.default.drvPath then
         throw "ui-sdk-inputs (${system}): ${consumer}/${sdk} must share the builder's package inputs"
       else true
-    ) sdkNames
+    ) sdkNames.${consumer}
   ) (builtins.attrNames consumers));
 in builtins.deepSeq checks (pkgs.runCommand "ui-sdk-input-tests" {} ''
   mkdir -p $out
-  echo "9 shared SDK/protocol contracts passed" > $out/results.txt
+  echo "8 shared SDK/protocol contracts passed" > $out/results.txt
 '')

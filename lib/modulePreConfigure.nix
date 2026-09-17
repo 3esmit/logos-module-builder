@@ -12,7 +12,8 @@ let
     in
       lib.concatStrings (map cap parts) + "Impl";
 
-  # Copy resolved external library outputs into ./lib for CMake EXTERNAL_LIBS / includes
+  # Copy resolved external library outputs into ./lib for CMake EXTERNAL_LIBS / includes.
+  # Same tree as logos-plugin-qt's externalLibCopies stages for the module build.
   copyExternalLibsToLib = externalLibs:
     let
       names = builtins.attrNames externalLibs;
@@ -23,7 +24,7 @@ let
           if v == null then ""
           else ''
             if [ -d "${v}/lib" ]; then
-              cp -f "${v}"/lib/* lib/ 2>/dev/null || true
+              cp -r "${v}"/lib/* lib/ 2>/dev/null || true
             fi
             # Windows ships a shared library's runtime half in bin/ (CMake's
             # RUNTIME destination). Mirror of the staging in
@@ -34,9 +35,14 @@ let
                 [ -f "$f" ] && cp -fL "$f" lib/ 2>/dev/null || true
               done
             fi
-            if [ -d "${v}/include" ]; then
-              cp -f "${v}"/include/*.h lib/ 2>/dev/null || true
+            if [ -f "${v}" ]; then
+              cp "${v}" lib/ 2>/dev/null || true
             fi
+            if [ -d "${v}/include" ]; then
+              cp -r "${v}"/include/* lib/ 2>/dev/null || true
+            fi
+            # The copies keep the store's read-only modes.
+            chmod -R u+w lib
           '';
     in
       if names == [] then ""
@@ -87,6 +93,7 @@ let
         logos-qt-host-generator --lidl ./generated_code/${config.name}.lidl \
           --backend cdylib \
           ${lib.optionalString ((config.concurrency or "single") == "multi") "--concurrency multi"} \
+          ${lib.optionalString (((config.concurrency or "single") == "multi") && ((config.max_workers or null) != null)) "--max-workers ${toString config.max_workers}"} \
           --output-dir ./generated_code
         # 3. The Qt-FREE C-ABI export wrapper (+ typed event emitters) around
         #    the hand-written impl class.
@@ -98,23 +105,6 @@ let
           --backend cdylib \
           --impl-class ${implClass} \
           --impl-header ${implHeaderInclude} \
-          --output-dir ./generated_code
-      '';
-
-  providerCodegen = config:
-    let
-      cg = config.codegen or {};
-      headerPath =
-        if cg ? provider_header then
-          cg.provider_header
-        else if cg ? impl_header && lib.hasInfix "/" cg.impl_header then
-          cg.impl_header
-        else
-          "src/${config.name}_impl.h";
-    in
-      ''
-        echo "logos-module-builder: generating provider dispatch (${config.name})..."
-        logos-cpp-generator --provider-header "$(pwd)/${headerPath}" \
           --output-dir ./generated_code
       '';
 
@@ -131,10 +121,19 @@ let
       # the builder stages it at generated_code/<name>.lidl (mkLogosModule's
       # lidlStaging), so no codegen.lidl is needed. Otherwise it's the committed
       # contract named by codegen.lidl.
-      lidlFile =
+      sourceLidl =
         if ((cg.rust or {}).trait or null) != null
         then "generated_code/${config.name}.lidl"
         else (cg.lidl or (throw "cdylib interface requires codegen.lidl in metadata.json"));
+      lidlFile = "generated_code/${config.name}.lidl";
+      # Normalize contract-first input alongside generated artifacts so the
+      # provider's lidl() method, #lidl output and package asset share bytes.
+      # Rust-first already emits a canonical document at this path.
+      stageLidl = lib.optionalString (((cg.rust or {}).trait or null) == null) ''
+        mkdir -p generated_code
+        logos-cpp-generator --normalize-lidl "${sourceLidl}" \
+          -o "${lidlFile}"
+      '';
       # Contract-first C++ flavor: when codegen names an impl_class, the
       # generator ALSO emits the C-ABI export wrapper (+ typed events) around
       # that hand-written Qt-free class. Without it (e.g. Rust modules whose
@@ -152,9 +151,11 @@ let
     in
       ''
         echo "logos-module-builder: generating cdylib Qt glue (${config.name})..."
+${stageLidl}
         logos-qt-host-generator --lidl "${lidlFile}" \
           --backend cdylib \
           ${lib.optionalString ((config.concurrency or "single") == "multi") "--concurrency multi"} \
+          ${lib.optionalString (((config.concurrency or "single") == "multi") && ((config.max_workers or null) != null)) "--max-workers ${toString config.max_workers}"} \
           --output-dir ./generated_code
         ${lib.optionalString (implClass != null) ''
           # Contract-first C++ flavor: the Qt-FREE C-ABI export wrapper
@@ -170,9 +171,34 @@ let
 
   # UI plugin backends (type=ui_qml + interface=universal): the USER
   # writes the .rep (the view contract) and the *Backend class (deriving
-  # <RepClass>SimpleSource + LogosUiPluginContext); the qt generator emits
+  # <RepClass>SimpleSource + LogosUiPluginContext); the view generator emits
   # only the *Interface.h and the *Plugin glue that wires the (Qt-typed)
   # LogosModules aggregate into the backend on initLogos.
+  #
+  # The binary is logos-VIEW-generator (logos-view-module), not
+  # logos-qt-generator (logos-qt-sdk). Both shipped the same emitter for a
+  # while and they rotted apart: logos-qt-sdk#38 added the module teardown
+  # hook to the copy this line used to call, and the other copy never got it.
+  #
+  # That divergence was invisible, and would have become permanent the moment
+  # this line was repointed without reconciling first: ui-host reaches
+  # aboutToUnload() BY NAME through the meta-object, so a generated plugin
+  # class that does not declare it simply has no such meta-method --
+  # QMetaObject::invokeMethod returns false and the host moves on, which is
+  # indistinguishable from a view answering "Synchronous, nothing to wait for".
+  # No build, load or call fails; every view just silently loses its chance to
+  # finish. logos-view-module's `ui-plugin-metaobject` check now compiles the
+  # emitted plugin and drives that handshake through QPluginLoader, so the
+  # regression cannot recur silently in the new home.
+  #
+  # The generator lives with the LogosView*.in templates its output is compiled
+  # against and with logos_ui_plugin_context.h, which its output calls into --
+  # one authoring surface, one repo, matching how logos-plugin-qt owns the
+  # cdylib Qt-plugin glue.
+  #
+  # `--backend ui` is spelled explicitly even though it is that binary's
+  # default: it keeps the call site self-describing, and logos-view-generator
+  # REFUSES an unrecognised --backend rather than silently defaulting.
   uiCodegen = config:
     let
       cg = config.codegen or {};
@@ -183,7 +209,7 @@ let
     in
       ''
         echo "logos-module-builder: generating ui plugin glue (${config.name})..."
-        logos-qt-generator --backend ui \
+        logos-view-generator --backend ui \
           --metadata metadata.json \
           --rep "${repFile}"${backendFlags} \
           --output-dir ./generated_code
@@ -193,8 +219,35 @@ let
     if config.interface == "universal" && (config.type or "core") == "ui_qml"
       then uiCodegen config
     else if config.interface == "universal" then universalCodegen config
-    else if config.interface == "provider" then providerCodegen config
     else if config.interface == "cdylib" then cdylibCodegen config
+    # `interface: "provider"` (LOGOS_METHOD dispatch via
+    # `logos-cpp-generator --provider-header`) was removed. Throw rather than
+    # falling through to the `else ""` no-op below: an unrecognised interface
+    # silently generates NO glue, so the module would build green and then be
+    # un-callable from every consumer.
+    else if config.interface == "provider" then
+      throw ("logos-module-builder: module '${config.name}' declares the removed "
+             + "interface \"provider\". Use interface \"universal\": write a plain "
+             + "src/${config.name}_impl.h and the contract is derived from it.")
+    # `legacy` — the default when metadata.json omits `interface` — generates no
+    # glue at all. For a CONSUMER that is correct and normal: a ui_qml view
+    # plugin is not loaded by liblogos, and a fixture that only builds tests has
+    # nothing to expose. For a module that ships a plugin liblogos loads and
+    # other modules call, it is the silent form of exactly what the `provider`
+    # branch above throws for — the module builds green and is un-callable from
+    # every consumer.
+    #
+    # `main` is what separates the two, and it is the only field that does:
+    # `type` alone cannot, because the core fixtures that legitimately generate
+    # nothing are core too. A provider ships a plugin, so it names one.
+    else if (config.type or "core") == "core" && (config.main or null) != null then
+      throw ("logos-module-builder: module '${config.name}' is a core module "
+             + "shipping a plugin (main: ${config.main}) but declares no "
+             + "`interface`, so NO glue would be generated and every call into "
+             + "it would fail at runtime rather than at build time. Use "
+             + "interface \"universal\" (write a plain src/${config.name}_impl.h "
+             + "and the contract is derived from it) or \"cdylib\" (bring your "
+             + "own C ABI plus codegen.lidl).")
     else "";
 
   # Order: optional ext copy -> optional darwin fixup -> codegen -> user hook
@@ -227,5 +280,5 @@ let
       stamp + copy + fix + preCodegen + codegen + userPre;
 
 in {
-  inherit defaultImplClassFromName copyExternalLibsToLib fixupDarwinDylibs universalCodegen providerCodegen uiCodegen autoCodegen compose stampProtocolVersion;
+  inherit defaultImplClassFromName copyExternalLibsToLib fixupDarwinDylibs universalCodegen uiCodegen autoCodegen compose stampProtocolVersion;
 }

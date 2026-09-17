@@ -63,7 +63,17 @@ let
       transitive = builtins.foldl' (acc: name:
         let
           input = depInputs.${name};
-          tdeps = (input.config or {}).dependencies or [];
+          # `configFor.<system>` is the dependency's PLATFORM-RESOLVED config;
+          # `config` is its system-agnostic one, which cannot answer for a
+          # platform-keyed `dependencies` and throws when asked. Prefer the
+          # resolved output when the dependency publishes one, and fall back
+          # to `config` for a dependency pinned to a builder that predates it.
+          tdeps =
+            if input ? configFor && input.configFor ? ${system}
+            then input.configFor.${system}.dependencies or []
+            else (input.config or {}).dependencies or [];
+          # Composed modules expose their graph through moduleInputs; older
+          # flakes still use the raw inputs attrset.
           tinputs = input.moduleInputs or (input.inputs or {});
         in
           if tdeps == [] then acc
@@ -79,6 +89,16 @@ let
   systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ]
     ++ lib.optional (logos-nix != null) "x86_64-windows";
 
+  # Native sets carry logos-nix's own overlays. These include the crates.io
+  # mirror fixes required by Rust modules; keep them in one place so callers
+  # cannot accidentally evaluate a native package set without them.
+  nativeOverlays =
+    if logos-nix == null then [ ]
+    else if logos-nix ? lib.nativeOverlays then logos-nix.lib.nativeOverlays
+    else throw ("logos-module-builder: the pinned logos-nix predates "
+                + "lib.nativeOverlays, so Rust modules would vendor crates from "
+                + "an endpoint crates.io 403s. Bump the logos-nix input.");
+
   # THE package-set constructor. Every module's pkgs comes from here, which is
   # what lets ~40 modules target Windows without each re-deriving the cross
   # plumbing.
@@ -88,7 +108,7 @@ let
   # exactly what logos-nix.lib.mkWindowsPkgs wraps.
   mkPkgsWith = extraOverlays: system:
     if system != "x86_64-windows" then
-      import nixpkgs { inherit system; overlays = extraOverlays; }
+      import nixpkgs { inherit system; overlays = nativeOverlays ++ extraOverlays; }
     else if logos-nix == null then
       throw ("logos-module-builder: targeting x86_64-windows requires the "
              + "logos-nix input to be threaded into the builder lib.")
@@ -128,6 +148,110 @@ let
   # Identity for every native system, so callers need no isWindows test.
   buildSystemFor = target:
     if target == "x86_64-windows" then windowsBuildSystem else target;
+
+  # Resolve concrete dependencies to typed wrappers generated from each
+  # dependency's published LIDL contract. Dependencies without a contract are
+  # rejected before a plugin build starts; this keeps optional dependencies
+  # genuinely optional and avoids compiling a dependency just for headers.
+  classifyConcreteDeps = { system, flakeInputs, src, config, builderName }:
+    let
+      depLidlOf = name:
+        let i = flakeInputs.${name} or null;
+        in if i != null && i ? packages && i.packages ? ${system}
+           then (i.packages.${system}.lidl or null)
+           else null;
+      depIsLidl = name:
+        (config.dependency_overrides ? ${name}) || (depLidlOf name != null);
+      optional = config.optional_dependencies or [];
+      fixHint = ''
+        Fix: pass the flake input for each name above and re-pin it against a
+        current logos-module-builder (any module built by one publishes
+        packages.<system>.lidl), or use a dependency_overrides entry. For a
+        target whose contract is intentionally dynamic, drop the declaration
+        and call modules().dynamic("<name>").
+      '';
+      requiredWithoutLidl = lib.filter (name: !(depIsLidl name)) config.dependencies;
+      optionalWithoutLidl = lib.filter (name: !(depIsLidl name)) optional;
+      assertRequiredPublishLidl =
+        if requiredWithoutLidl == [] then null
+        else throw ''
+          metadata.json: module '${config.name}' lists dependencies that publish no LIDL
+          contract: ${lib.concatStringsSep ", " requiredWithoutLidl}
+
+          ${fixHint}
+        '';
+      assertOptionalPublishLidl =
+        if optionalWithoutLidl == [] then null
+        else throw ''
+          metadata.json: module '${config.name}' lists optional dependencies that publish
+          no LIDL contract: ${lib.concatStringsSep ", " optionalWithoutLidl}
+
+          ${fixHint}
+        '';
+      resolve = name:
+        let ov = config.dependency_overrides.${name} or null;
+        in if ov != null then {
+             inherit name;
+             impl_class = ov.impl_class;
+             path = if ov.input != null
+                    then (if flakeInputs ? ${ov.input}
+                          then "${flakeInputs.${ov.input}}/${ov.file}"
+                          else throw "dependency_overrides.${name}: flake input '${ov.input}' was not passed to ${builderName}.")
+                    else "${src}/${ov.file}";
+           } else {
+             inherit name;
+             impl_class = null;
+             path = "${depLidlOf name}/${name}.lidl";
+           };
+    in {
+      staticDeps = map resolve
+        (builtins.seq assertRequiredPublishLidl
+          (builtins.seq assertOptionalPublishLidl (config.dependencies ++ optional)));
+    };
+
+  # Install canonical LIDL contracts in an output consumed by bundlers. Input
+  # definitions are normalized through the same generator used by modules.
+  installLidlContracts = { pkgs, specs, destination }:
+    let
+      one = e:
+        let
+          name = e.name;
+          path = e.path;
+          implClass = e.impl_class or null;
+          isLidl = lib.hasSuffix ".lidl" path;
+          isHeader = lib.hasSuffix ".h" path || lib.hasSuffix ".hpp" path;
+          metadata = pkgs.writeText "${name}-interface-metadata.json"
+            (builtins.toJSON { inherit name; version = "1.0.0"; dependencies = [ ]; });
+          produce =
+            if isLidl then ''
+              logos-cpp-generator --normalize-lidl ${lib.escapeShellArg path} -o "$_lidl_candidate"
+            ''
+            else if isHeader && implClass != null then ''
+              logos-cpp-generator --header-to-lidl ${lib.escapeShellArg path} \
+                --impl-class ${lib.escapeShellArg implClass} \
+                --metadata ${lib.escapeShellArg metadata} \
+                -o "$_lidl_candidate"
+            ''
+            else throw ''
+              logos-module-builder: cannot bundle interface '${name}' from ${path}.
+              A contract must be a `.lidl` file, or a `.h`/`.hpp` file with an
+              `impl_class`.
+            '';
+        in ''
+          mkdir -p "${destination}"
+          _lidl_candidate="$(mktemp)"
+          ${produce}
+          if [ -e "${destination}/${name}.lidl" ]; then
+            if ! cmp -s "$_lidl_candidate" "${destination}/${name}.lidl"; then
+              echo "Error: conflicting LIDL contracts resolve to '${name}.lidl'" >&2
+              exit 1
+            fi
+          else
+            install -m644 "$_lidl_candidate" "${destination}/${name}.lidl"
+          fi
+          rm -f "$_lidl_candidate"
+        '';
+    in lib.concatMapStringsSep "\n" one specs;
 
   # Resolve the TRANSITIONAL header-copy dependencies (deps publishing no `lidl`
   # contract) from flake inputs, as a struct exposing the dep's plugin (.lib)
@@ -220,7 +344,8 @@ let
     });
 
 in {
-  inherit systems mkPkgs mkPkgsWith forAllSystems buildSystemFor resolveLegacyHeaderDeps;
+  inherit systems mkPkgs mkPkgsWith forAllSystems buildSystemFor
+    classifyConcreteDeps installLidlContracts resolveLegacyHeaderDeps;
 
   inherit collectAllModuleDeps;
 
