@@ -965,11 +965,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1789574277,
-        "narHash": "sha256-mPzXEW6KL2NOWc0PUltwCCMTO3Joh9fXUb57jleI4pk=",
+        "lastModified": 1789631219,
+        "narHash": "sha256-lqn3ms9SxsfexrQ3fvAfL4rZG1o/3bQ1dZ4lSPFZUgI=",
         "owner": "logos-co",
         "repo": "logos-design-system",
-        "rev": "80aa8e3c5e2879512285bf78dd4b9b7985ecfb74",
+        "rev": "1dbd65b369da2e0347f03a1d553eb7f2ae15b547",
         "type": "github"
       },
       "original": {
