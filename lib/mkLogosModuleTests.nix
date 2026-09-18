@@ -13,7 +13,7 @@
 #     flakeInputs = inputs;
 #     mockCLibs = ["gowalletsdk"];  # optional
 #   };
-{ nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-protocol, logos-qt-sdk, logos-plugin-qt ? null, logos-view-module ? null, logos-test-framework }:
+{ nixpkgs, lib, common, parseMetadata, logos-cpp-sdk, logos-protocol, logos-qt-sdk, logos-plugin-qt ? null, logos-view-module, logos-test-framework }:
 
 let
   qtPlugin = common.requireQtPlugin logos-plugin-qt;

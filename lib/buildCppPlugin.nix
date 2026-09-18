@@ -18,6 +18,7 @@
 
 let
   metadataJson = builtins.readFile configFile;
+  qtPlugin = common.requireQtPlugin logos-plugin-qt;
 
   # `config` is parsed with NO platform: it answers only for the fields no
   # `platforms` overlay may vary (name / version / type / interface), which are
@@ -202,7 +203,7 @@ let
       # dimension, and logos-view-module publishes only the four NATIVE
       # systems, so `packages.x86_64-windows` would EVAL-fail on the Windows leg.
       viewTemplates =
-        logos-view-module.packages.${common.buildSystemFor system}.logos-view-templates;
+        (common.requireViewModule logos-view-module).packages.${common.buildSystemFor system}.logos-view-templates;
       # The VIEW plugin glue generator (`--backend ui`). It lives in
       # logos-view-module, beside the LogosView*.in templates the glue it emits
       # is compiled against and beside logos_ui_plugin_context.h, which that
@@ -395,7 +396,7 @@ let
       # no-op off the Windows target.
       logosSdkBuild = logos-cpp-sdk.packages.${common.buildSystemFor system}.default;
       logosQtSdk = logos-qt-sdk.packages.${system}.default;
-      logosQtHost = logos-plugin-qt.packages.${system}.logos-qt-host;
+      logosQtHost = qtPlugin.packages.${system}.logos-qt-host;
       # The Qt glue generator (universal/cdylib/ui backends) — Qt code is
       # the Qt layer's product; logos-cpp-generator keeps Qt-free outputs.
       logosQtGenerator = logos-qt-sdk.packages.${common.buildSystemFor system}.logos-qt-generator;
@@ -415,7 +416,7 @@ let
       # dimension, and logos-view-module publishes only the four NATIVE
       # systems, so `packages.x86_64-windows` would EVAL-fail on the Windows leg.
       viewTemplates =
-        logos-view-module.packages.${common.buildSystemFor system}.logos-view-templates;
+        (common.requireViewModule logos-view-module).packages.${common.buildSystemFor system}.logos-view-templates;
       # The VIEW plugin glue generator (`--backend ui`). It lives in
       # logos-view-module, beside the LogosView*.in templates the glue it emits
       # is compiled against and beside logos_ui_plugin_context.h, which that

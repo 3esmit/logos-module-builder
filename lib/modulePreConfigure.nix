@@ -151,7 +151,7 @@ let
     in
       ''
         echo "logos-module-builder: generating cdylib Qt glue (${config.name})..."
-${stageLidl}
+        ${stageLidl}
         logos-qt-host-generator --lidl "${lidlFile}" \
           --backend cdylib \
           ${lib.optionalString ((config.concurrency or "single") == "multi") "--concurrency multi"} \
