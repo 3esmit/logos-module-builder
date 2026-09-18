@@ -93,7 +93,7 @@
     # Keep the parser fix in the maintained fork until upstream incorporates it.
     logos-view-module.url = "github:3esmit/logos-view-module?rev=732a43472f18aa8ec4f8cff0cf10c0a0b3086ffd";
     logos-view-module.inputs.logos-nix.follows = "logos-nix";
-    logos-liblogos.url = "github:3esmit/logos-liblogos?rev=19b8b5d258818879e6bcfb9e91cbad92ef4f03d0";
+    logos-liblogos.url = "github:3esmit/logos-liblogos?rev=8952610416c758fbb33f8eee7eac5074a506e361";
     logos-liblogos.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
     logos-liblogos.inputs.logos-qt-sdk.follows = "logos-qt-sdk";
     logos-liblogos.inputs.logos-protocol.follows = "logos-protocol";

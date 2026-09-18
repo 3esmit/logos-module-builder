@@ -5444,17 +5444,17 @@
         "process-stats": "process-stats_17"
       },
       "locked": {
-        "lastModified": 1789694087,
-        "narHash": "sha256-81vmEj+c48MuTB8zKXy9AnR2R5WW0SUxtK+RsC1kYvI=",
+        "lastModified": 1789696873,
+        "narHash": "sha256-rKJ1soBcImrpyI8OfS4MHpm2Uz2ZENB+I0i3nks3/O0=",
         "owner": "3esmit",
         "repo": "logos-liblogos",
-        "rev": "19b8b5d258818879e6bcfb9e91cbad92ef4f03d0",
+        "rev": "8952610416c758fbb33f8eee7eac5074a506e361",
         "type": "github"
       },
       "original": {
         "owner": "3esmit",
         "repo": "logos-liblogos",
-        "rev": "19b8b5d258818879e6bcfb9e91cbad92ef4f03d0",
+        "rev": "8952610416c758fbb33f8eee7eac5074a506e361",
         "type": "github"
       }
     },
