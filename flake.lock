@@ -32476,11 +32476,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1789607395,
-        "narHash": "sha256-IlW7XNcDXAuVtNsVroBw+RNGTl9RVhFB9c5uwMWkZ9c=",
+        "lastModified": 1789679290,
+        "narHash": "sha256-2kQrRoC5Ev76RCgvBYPTQhP04ny8sL4MtWwPZlbI4I4=",
         "owner": "logos-co",
         "repo": "logos-plugin-qt",
-        "rev": "3dd93fe624527581df11af36f22504d6cd9f625c",
+        "rev": "3a471be14af66d099827ee712ec8c40ead701340",
         "type": "github"
       },
       "original": {
@@ -36866,16 +36866,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1789657279,
-        "narHash": "sha256-AayyLTGKjeON8dgwY8fKvTIUSuxn7u0ZoIKxM1amci8=",
-        "owner": "logos-co",
+        "lastModified": 1789685661,
+        "narHash": "sha256-vNLVbGgn4M5L2XMpMIbrYKfZrJaI8pBdX2ir/5HiQ/I=",
+        "owner": "3esmit",
         "repo": "logos-standalone-app",
-        "rev": "a91384291464877c23782e013482a78be8103ebe",
+        "rev": "fdc5ff120a7e493749d7969af6b9f8cd137a0f71",
         "type": "github"
       },
       "original": {
-        "owner": "logos-co",
+        "owner": "3esmit",
         "repo": "logos-standalone-app",
+        "rev": "fdc5ff120a7e493749d7969af6b9f8cd137a0f71",
         "type": "github"
       }
     },

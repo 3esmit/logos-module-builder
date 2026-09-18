@@ -97,7 +97,11 @@
     logos-liblogos.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
     logos-liblogos.inputs.logos-qt-sdk.follows = "logos-qt-sdk";
     logos-liblogos.inputs.logos-protocol.follows = "logos-protocol";
-    logos-standalone-app.url = "github:logos-co/logos-standalone-app";
+    # Keep the standalone host on the maintained fork while its consumer
+    # admission fix is carried downstream. UI doc-tests rely on that host
+    # registering each in-process view identity with capability_module before
+    # the generated backend makes its first dependency call.
+    logos-standalone-app.url = "github:3esmit/logos-standalone-app?rev=fdc5ff120a7e493749d7969af6b9f8cd137a0f71";
     logos-standalone-app.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
     logos-standalone-app.inputs.logos-protocol.follows = "logos-protocol";
     logos-standalone-app.inputs.logos-liblogos.follows = "logos-liblogos";
