@@ -239,8 +239,12 @@ let
     #
     # `main` is what separates the two, and it is the only field that does:
     # `type` alone cannot, because the core fixtures that legitimately generate
-    # nothing are core too. A provider ships a plugin, so it names one.
-    else if (config.type or "core") == "core" && (config.main or null) != null then
+    # nothing are core too. A provider ships a plugin, so it names one. An
+    # explicitly declared `legacy` interface remains available for existing
+    # hand-written Qt plugins; omission still fails closed so a new provider
+    # cannot silently ship without generated glue.
+    else if (config.type or "core") == "core" && (config.main or null) != null
+            && (!(config._raw ? interface) || config.interface != "legacy") then
       throw ("logos-module-builder: module '${config.name}' is a core module "
              + "shipping a plugin (main: ${config.main}) but declares no "
              + "`interface`, so NO glue would be generated and every call into "

@@ -18,7 +18,9 @@ let
     }
     {
       path = [ "logos-view-module-runtime" "inputs" ];
-      names = names;
+      # The runtime's Qt host moved to logos-plugin-qt; only its C++ SDK and
+      # protocol edges are direct shared contracts now.
+      names = [ "logos-cpp-sdk" "logos-protocol" ];
     }
     {
       path = [ "logos-standalone-app" "inputs" "logos-liblogos" "inputs" ];
@@ -40,8 +42,8 @@ let
   ) paths);
 in
 if !(accepts inputs) || !(builtins.all (value: value) rejected) then
-  throw "ui-sdk-contract (${system}): positive or one of 16 negative fixtures failed"
+  throw "ui-sdk-contract (${system}): positive or one of 14 negative fixtures failed"
 else pkgs.runCommand "ui-sdk-contract-tests" {} ''
   mkdir -p $out
-  echo "17 SDK contract fixtures passed" > $out/results.txt
+  echo "15 SDK contract fixtures passed" > $out/results.txt
 ''

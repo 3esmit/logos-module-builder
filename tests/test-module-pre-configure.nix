@@ -57,6 +57,14 @@ let
     type = "core";
   };
 
+  legacyPlugin = auto {
+    name = "handwritten_module";
+    interface = "legacy";
+    type = "core";
+    main = "handwritten_module_plugin";
+    _raw = { interface = "legacy"; };
+  };
+
   ui = auto {
     name = "ticker_panel";
     interface = "universal";
@@ -125,4 +133,6 @@ in [
 
   # The catch-all is unchanged for interfaces that were never retired.
   (assertBool "legacy interface still generates no glue" (legacy == "") true)
+  (assertBool "explicit legacy interface keeps handwritten plugin path"
+    (legacyPlugin == "") true)
 ]
