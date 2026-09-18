@@ -32445,17 +32445,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1789679290,
-        "narHash": "sha256-2kQrRoC5Ev76RCgvBYPTQhP04ny8sL4MtWwPZlbI4I4=",
-        "owner": "logos-co",
+        "lastModified": 1789705620,
+        "narHash": "sha256-Avgj7y0Sg8t7Jk4eV7z5IgMyh1aamwJPucBXrJNCpPg=",
+        "owner": "3esmit",
         "repo": "logos-plugin-qt",
-        "rev": "3a471be14af66d099827ee712ec8c40ead701340",
+        "rev": "49d9bcfa840cc9d0eaeafc46cee76e51cddef40b",
         "type": "github"
       },
       "original": {
-        "owner": "logos-co",
+        "owner": "3esmit",
         "repo": "logos-plugin-qt",
-        "rev": "3a471be14af66d099827ee712ec8c40ead701340",
+        "rev": "49d9bcfa840cc9d0eaeafc46cee76e51cddef40b",
         "type": "github"
       }
     },

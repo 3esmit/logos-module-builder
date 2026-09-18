@@ -48,7 +48,9 @@
     # protocol builds on one link line means two TokenManager singletons.
     #
     # Keep the host runtime and generator revision used by the forked SDKs.
-    logos-plugin-qt.url = "github:logos-co/logos-plugin-qt/3a471be14af66d099827ee712ec8c40ead701340";
+    # The maintained fork carries explicit target-instance routing required by
+    # capability-module when one host exposes multiple instances of a module.
+    logos-plugin-qt.url = "github:3esmit/logos-plugin-qt?rev=49d9bcfa840cc9d0eaeafc46cee76e51cddef40b";
     logos-plugin-qt.inputs.logos-nix.follows = "logos-nix";
     logos-plugin-qt.inputs.logos-lidl.follows = "logos-cpp-sdk/logos-lidl";
     logos-plugin-qt.inputs.logos-protocol.follows = "logos-protocol";
