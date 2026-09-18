@@ -48,7 +48,9 @@
     # protocol builds on one link line means two TokenManager singletons.
     #
     # Keep the host runtime and generator revision used by the forked SDKs.
-    logos-plugin-qt.url = "github:logos-co/logos-plugin-qt/3a471be14af66d099827ee712ec8c40ead701340";
+    # The maintained fork carries explicit target-instance routing required by
+    # capability-module when one host exposes multiple instances of a module.
+    logos-plugin-qt.url = "github:3esmit/logos-plugin-qt?rev=49d9bcfa840cc9d0eaeafc46cee76e51cddef40b";
     logos-plugin-qt.inputs.logos-nix.follows = "logos-nix";
     logos-plugin-qt.inputs.logos-lidl.follows = "logos-cpp-sdk/logos-lidl";
     logos-plugin-qt.inputs.logos-protocol.follows = "logos-protocol";
@@ -63,9 +65,8 @@
     # this flake — no standalone release required.
     logos-design-system.url = "github:logos-co/logos-design-system";
     logos-design-system.inputs.logos-nix.follows = "logos-nix";
-    logos-view-module-runtime.url = "github:3esmit/logos-view-module-runtime?rev=8aac03585bba147df1ea409af5ac177cf967713d";
+    logos-view-module-runtime.url = "github:3esmit/logos-view-module-runtime?rev=6925d8bc2c5fa9da60ee30b32c036c2e3e1bcb4b";
     logos-view-module-runtime.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
-    logos-view-module-runtime.inputs.logos-qt-sdk.follows = "logos-qt-sdk";
     logos-view-module-runtime.inputs.logos-protocol.follows = "logos-protocol";
     # The MODULE side of that same pair, and the ui_qml authoring flavour as a
     # whole: LogosViewModule.cmake, the four LogosView*.in templates
@@ -94,11 +95,15 @@
     # Keep the parser fix in the maintained fork until upstream incorporates it.
     logos-view-module.url = "github:3esmit/logos-view-module?rev=732a43472f18aa8ec4f8cff0cf10c0a0b3086ffd";
     logos-view-module.inputs.logos-nix.follows = "logos-nix";
-    logos-liblogos.url = "github:logos-co/logos-liblogos/2f4162a97f3b6d8f469ac669cd0f198f604606ca";
+    logos-liblogos.url = "github:3esmit/logos-liblogos?rev=8952610416c758fbb33f8eee7eac5074a506e361";
     logos-liblogos.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
     logos-liblogos.inputs.logos-qt-sdk.follows = "logos-qt-sdk";
     logos-liblogos.inputs.logos-protocol.follows = "logos-protocol";
-    logos-standalone-app.url = "github:logos-co/logos-standalone-app";
+    # Keep the standalone host on the maintained fork while its consumer
+    # admission fix is carried downstream. UI doc-tests rely on that host
+    # registering each in-process view identity with capability_module before
+    # the generated backend makes its first dependency call.
+    logos-standalone-app.url = "github:3esmit/logos-standalone-app?rev=fdc5ff120a7e493749d7969af6b9f8cd137a0f71";
     logos-standalone-app.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
     logos-standalone-app.inputs.logos-protocol.follows = "logos-protocol";
     logos-standalone-app.inputs.logos-liblogos.follows = "logos-liblogos";
