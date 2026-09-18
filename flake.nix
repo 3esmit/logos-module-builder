@@ -63,9 +63,8 @@
     # this flake — no standalone release required.
     logos-design-system.url = "github:logos-co/logos-design-system";
     logos-design-system.inputs.logos-nix.follows = "logos-nix";
-    logos-view-module-runtime.url = "github:3esmit/logos-view-module-runtime?rev=8aac03585bba147df1ea409af5ac177cf967713d";
+    logos-view-module-runtime.url = "github:3esmit/logos-view-module-runtime?rev=6925d8bc2c5fa9da60ee30b32c036c2e3e1bcb4b";
     logos-view-module-runtime.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
-    logos-view-module-runtime.inputs.logos-qt-sdk.follows = "logos-qt-sdk";
     logos-view-module-runtime.inputs.logos-protocol.follows = "logos-protocol";
     # The MODULE side of that same pair, and the ui_qml authoring flavour as a
     # whole: LogosViewModule.cmake, the four LogosView*.in templates
@@ -94,7 +93,7 @@
     # Keep the parser fix in the maintained fork until upstream incorporates it.
     logos-view-module.url = "github:3esmit/logos-view-module?rev=732a43472f18aa8ec4f8cff0cf10c0a0b3086ffd";
     logos-view-module.inputs.logos-nix.follows = "logos-nix";
-    logos-liblogos.url = "github:logos-co/logos-liblogos/2f4162a97f3b6d8f469ac669cd0f198f604606ca";
+    logos-liblogos.url = "github:3esmit/logos-liblogos?rev=19b8b5d258818879e6bcfb9e91cbad92ef4f03d0";
     logos-liblogos.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
     logos-liblogos.inputs.logos-qt-sdk.follows = "logos-qt-sdk";
     logos-liblogos.inputs.logos-protocol.follows = "logos-protocol";
