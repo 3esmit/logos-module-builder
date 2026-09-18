@@ -59,6 +59,7 @@
 
 let
   metadataJson = builtins.readFile configFile;
+  qtPlugin = common.requireQtPlugin logos-plugin-qt;
 
   # ── Two configs, and why ──────────────────────────────────────────────────
   #
@@ -395,7 +396,7 @@ let
       # NATIVE systems, so `packages.x86_64-windows` would EVAL-fail on the
       # Windows leg — a failure that is invisible until someone crosses.
       viewTemplates =
-        logos-view-module.packages.${common.buildSystemFor system}.logos-view-templates;
+        (common.requireViewModule logos-view-module).packages.${common.buildSystemFor system}.logos-view-templates;
       # The VIEW plugin glue generator (`--backend ui`). It lives in
       # logos-view-module, beside the LogosView*.in templates the glue it emits
       # is compiled against and beside logos_ui_plugin_context.h, which that
@@ -1081,7 +1082,7 @@ let
       # NATIVE systems, so `packages.x86_64-windows` would EVAL-fail on the
       # Windows leg — a failure that is invisible until someone crosses.
       viewTemplates =
-        logos-view-module.packages.${common.buildSystemFor system}.logos-view-templates;
+        (common.requireViewModule logos-view-module).packages.${common.buildSystemFor system}.logos-view-templates;
       # The VIEW plugin glue generator (`--backend ui`). It lives in
       # logos-view-module, beside the LogosView*.in templates the glue it emits
       # is compiled against and beside logos_ui_plugin_context.h, which that
