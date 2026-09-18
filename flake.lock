@@ -445,11 +445,11 @@
         "logos-module-builder": "logos-module-builder"
       },
       "locked": {
-        "lastModified": 1787151301,
-        "narHash": "sha256-Db3Dk9qPKiqGRC6AYEGFjgdcu4oIXMTfP9TZGflWyfk=",
+        "lastModified": 1789702885,
+        "narHash": "sha256-qqsCK/hagw/wcGbmfJMf8ceReA7Gvhn+JUjQtk5lx4Y=",
         "owner": "3esmit",
         "repo": "logos-capability-module",
-        "rev": "4ccbc36c0347dc2b9aa7c06c349ca138c927ba92",
+        "rev": "947d78b18215805a9fb0cc7ac6260ca4be87c2d9",
         "type": "github"
       },
       "original": {
