@@ -676,11 +676,11 @@
         "logos-module-builder": "logos-module-builder"
       },
       "locked": {
-        "lastModified": 1789706626,
-        "narHash": "sha256-9cQfN7Ms0iSXVfOw0CMjrxfYQzy36D9ASLJ8SYpPg7Q=",
+        "lastModified": 1789708398,
+        "narHash": "sha256-YiJ83z6Zoevra5O4rC7sDSX5gxpUSHr00CMsEA4RgP0=",
         "owner": "3esmit",
         "repo": "logos-capability-module",
-        "rev": "ecd52aca5afa8d0c4565d515de570cdd41f6ca39",
+        "rev": "a5d19c500873a608088b6c6e5e2333dd9e830516",
         "type": "github"
       },
       "original": {
